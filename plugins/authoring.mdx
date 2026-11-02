@@ -19,7 +19,7 @@ Name and version of your plugin
 
     ```go main.go
     import (
-        tangent_sdk "github.com/telophasehq/tangent-sdk-go"
+        tangent_sdk "github.com/ethanblackburn/tangent-sdk-go"
     )
     
     var Metadata = tangent_sdk.Metadata{
@@ -68,7 +68,7 @@ Used to tell the host which logs to send to the mapper
 
     ```go main.go
     import (
-        tangent_sdk "github.com/telophasehq/tangent-sdk-go"
+        tangent_sdk "github.com/ethanblackburn/tangent-sdk-go"
     )
     
     var selectors = []tangent_sdk.Selector{
@@ -150,8 +150,8 @@ Performance note: Always prefer to fetch scalar values from the log. Scalars do 
 
     ```go main.go
     import (
-        tangent_sdk "github.com/telophasehq/tangent-sdk-go"
-        "github.com/telophasehq/tangent-sdk-go/helpers"
+        tangent_sdk "github.com/ethanblackburn/tangent-sdk-go"
+        "github.com/ethanblackburn/tangent-sdk-go/helpers"
     )
     
     type ExampleOutput struct {
@@ -247,9 +247,9 @@ Plugins can make network calls to enrich logs. In this example, we batch all uni
         "fmt"
         "net/url"
     
-        tangent_sdk "github.com/telophasehq/tangent-sdk-go"
-        "github.com/telophasehq/tangent-sdk-go/helpers"
-        "github.com/telophasehq/tangent-sdk-go/http"
+        tangent_sdk "github.com/ethanblackburn/tangent-sdk-go"
+        "github.com/ethanblackburn/tangent-sdk-go/helpers"
+        "github.com/ethanblackburn/tangent-sdk-go/http"
     )
     
     type EnrichedOutput struct {
