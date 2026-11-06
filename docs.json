@@ -150,6 +150,11 @@
               "plugins/authoring",
               "plugins/community"
             ]
+          },
+          {
+            "group": "Packs",
+            "icon": "package",
+            "pages": ["packs/overview"]
           }
         ]
       },
