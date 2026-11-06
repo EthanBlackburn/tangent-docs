@@ -131,6 +131,7 @@
             "pages": [
               "configuration/sinks/overview",
               "configuration/sinks/s3",
+              "configuration/sinks/rolling-file",
               "configuration/sinks/file",
               "configuration/sinks/blackhole",
               "configuration/sinks/encoding",

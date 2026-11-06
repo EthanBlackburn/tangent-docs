@@ -1,43 +1,50 @@
 ---
 title: "Overview"
-description: "Write processed records to storage systems or discard them."
+description: "Write processed records to storage, or discard them."
 ---
 
-Sinks define **where Tangent writes data to** — for example, S3 buckets, local files, or testing targets like `blackhole`.  
-They are the **terminal nodes** of the DAG: after records are processed by plugins, they are serialized and written by sinks.
-
----
-
-## Sink Types
-
-| Type | Description | Example |
-|------|--------------|----------|
-| [`s3`](/configuration/sinks/s3) | Write to Amazon S3 buckets with WAL durability | `my-bucket` |
-| [`file`](/configuration/sinks/file) | Write to local or mounted filesystem paths | `/var/lib/tangent/output.json` |
-| [`blackhole`](/configuration/sinks/blackhole) | Discard output (useful for testing) | — |
+Sinks define **where Tangent writes data**: S3 buckets, files and directories, a SQLite table, Slack, or nowhere at all. They're the **terminal nodes** of the DAG: an edge can end at a sink, and none can leave one.
 
 ---
 
-## Common Configuration
+## Sink types
+
+| Type | Writes | Docs |
+|------|--------|------|
+| `s3` | objects in an Amazon S3 bucket, through a local WAL | [S3](/configuration/sinks/s3) |
+| `rolling_file` | whole files in a directory, for a query engine to read | [Rolling file](/configuration/sinks/rolling-file) |
+| `file` | NDJSON appended to one file | [File](/configuration/sinks/file) |
+| `blackhole` | nothing: records are discarded | [Blackhole](/configuration/sinks/blackhole) |
+| `sqlite` | rows in a SQLite table, with an index per partition | [README](https://github.com/EthanBlackburn/tangent#keeping-records-and-reading-them-back) |
+| `slack` | one Slack message per record, through an incoming webhook | [packs/core](https://github.com/EthanBlackburn/tangent/tree/main/packs/core#slack) |
+
+---
+
+## Common configuration
 
 <ParamField path="type" type="string" required>
-Selects the sink type.  
-One of: `s3`, `file`, or `blackhole`.
+Selects the sink type, from the table above.
 </ParamField>
 
 <ParamField path="encoding" type="object">
-Controls how Tangent serializes records before writing.  
-See [Encoding](/configuration/sinks/encoding) for supported formats (`ndjson`, `json`, `avro`, `parquet`).
+How records are serialized before they're written. Defaults to `{ type: ndjson }`. See [Encoding](/configuration/sinks/encoding).
 </ParamField>
 
 <ParamField path="compression" type="object">
-Configures compression for sink objects.  
-See [Compression](/configuration/sinks/compression) for algorithm details and levels.
+How encoded data is compressed. Defaults to `{ type: zstd, level: 3 }`. See [Compression](/configuration/sinks/compression).
+</ParamField>
+
+<ParamField path="object_max_bytes" type="int">
+For `s3` and `rolling_file`, the size of records at which a WAL file is sealed and becomes an object or file. Defaults to `134217728` (128 MiB).
+</ParamField>
+
+<ParamField path="in_flight_limit" type="int">
+Writes in flight to this sink at once. Defaults to `16`.
 </ParamField>
 
 ---
 
-## Example (S3 Sink)
+## Example (S3 sink)
 
 ```yaml tangent.yaml icon=upload
 sinks:
@@ -47,26 +54,28 @@ sinks:
     region: us-west-2
     encoding:
       type: parquet
-      schema: ./schemas/arrow_schema.json
+      schema:
+        ts: timestamp
+        message: string
     compression:
       type: gzip
       level: 6
-````
+```
 
 ---
 
 ## Behavior
 
-* Each sink manages its own WAL and upload queue.
-* Data rotation happens automatically based on time or size thresholds.
-* Tangent guarantees **at-least-once delivery** — WALs ensure safe recovery on restart.
-* Encoding and compression are handled transparently before upload.
+* The `s3` and `rolling_file` sinks each keep a write-ahead log (WAL). A write is acked once it's in the WAL, and a WAL file is sealed by size (`object_max_bytes`) or age (`max_file_age_seconds`), then written out whole.
+* Encoding and compression happen when a sealed file is written out.
+* A sink's name can't also name a source, plugin, or inference node.
 
 ---
 
 ## See also
 
 * [S3 Sink](/configuration/sinks/s3)
+* [Rolling file Sink](/configuration/sinks/rolling-file)
 * [File Sink](/configuration/sinks/file)
 * [Blackhole Sink](/configuration/sinks/blackhole)
 * [Encoding](/configuration/sinks/encoding)
