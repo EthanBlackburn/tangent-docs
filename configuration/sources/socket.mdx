@@ -14,7 +14,7 @@ Must be `socket`.
 </ParamField>
 
 <ParamField path="socket_path" type="string">
-Path to the Unix domain socket to listen on. Defaults to `/tmp/sidecar.sock`.
+Path to the Unix domain socket to listen on. Defaults to `/tmp/sidecar.sock`. A socket's path has to be shorter than about 100 bytes (104 on macOS, 108 on Linux). A longer one logs `socket listener error: path must be shorter than SUN_LEN`, and the pipeline runs on without the source, so use a short absolute path or one relative to the working directory.
 </ParamField>
 
 ---
