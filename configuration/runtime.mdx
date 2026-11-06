@@ -81,6 +81,10 @@ Longest TTL a write can ask for. `0` means no cap. Defaults to `3600000` (1 hour
 Entries the `lru` backend holds before it evicts the least recently used. Defaults to `100000`.
 </ParamField>
 
+<ParamField path="state.lock_timeout_ms" type="int">
+The `sqlite` backend's file belongs to one pipeline at a time, which holds a lock beside it (`state.sqlite.lock`). A second `tangent run` on the same file waits this long for the lock, then stops with `failed to acquire state lock ... (is another tangent running?)`. Defaults to `30000` (30 seconds).
+</ParamField>
+
 <ParamField path="state.read_only" type="bool">
 Opens another pipeline's SQLite state for reading only, without taking its lock. The file has to exist already, so start the writing pipeline first. Writes fail, and an expired entry reads as missing. A pipeline whose runtime writes state itself, such as one with a source that polls an API, can't open state read-only. Defaults to `false`.
 </ParamField>
