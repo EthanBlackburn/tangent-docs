@@ -1,0 +1,33 @@
+---
+title: 'tangent plugin fetch'
+description: 'Download prebuilt plugins and check their attestation.'
+mode: "center"
+---
+
+`tangent plugin fetch` downloads each plugin a config names as `prebuilt`, compiled by its repository's CI, and checks GitHub's attestation of its build before keeping it. It needs no WASM toolchain, only [`gh`](https://cli.github.com).
+
+```bash
+tangent plugin fetch --config tangent.yaml
+```
+
+**Options**
+
+* `--config <file>` (required): the config whose prebuilt plugins to fetch.
+* `--plugin <name>`: fetch only this plugin.
+
+**What it does**
+
+For each plugin with a [`prebuilt`](/configuration/plugins) block, `fetch` downloads the component from the `repo`'s release (this tangent's version unless `release` names another), has `gh attestation verify` check it, and precompiles it into [`runtime.plugins_path`](/configuration/runtime), where `tangent run` reads it.
+
+The check requires that the component was signed for `repo` from the release's tag, by `workflow` when one is named, and that the attestation names the file as the asset requested, not only by its digest. A plugin that doesn't verify isn't kept, and there's no flag to skip the check. `sha256:` on `prebuilt` also pins the component's digest.
+
+With the attestation bundle on the release (`<asset>.sigstore.json`), nothing calls GitHub's API, so `gh` doesn't need to be logged in. A release without the bundle falls back to the API, which needs `gh auth login`. `fetch` prints the command it ran, so you can run the check again by hand:
+
+```bash
+gh attestation verify plugins/aws.component.wasm --repo EthanBlackburn/tangent --source-ref refs/tags/v0.1.10 \
+  --bundle plugins/aws.component.wasm.sigstore.json --signer-workflow EthanBlackburn/tangent/.github/workflows/attest-packs.yml
+```
+
+<Note>
+The [packs](/packs/overview)' prebuilt plugins ship with tangent's releases after 0.1.9. With 0.1.9, or a tangent built from source before that release, compile the packs with `tangent plugin compile` instead.
+</Note>

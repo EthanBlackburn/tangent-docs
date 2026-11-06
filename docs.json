@@ -65,7 +65,8 @@
             "group": "Compile plugin",
             "icon": "box",
             "pages": [
-              "cli/plugin/compile"
+              "cli/plugin/compile",
+              "cli/plugin/fetch"
             ]
           },
           {
@@ -74,6 +75,14 @@
             "pages": [
               "cli/bench",
               "cli/plugin/test"
+            ]
+          },
+          {
+            "group": "Inspect",
+            "icon": "search",
+            "pages": [
+              "cli/config",
+              "cli/state"
             ]
           }
         ]

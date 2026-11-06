@@ -1,0 +1,35 @@
+---
+title: 'tangent config'
+description: 'Print a config as the runtime reads it.'
+mode: "center"
+---
+
+`tangent config` prints the config the way the runtime reads it: its [includes](/configuration/include) merged, `${VAR}` expanded, and every default filled in. Use it to check what a pipeline of several files adds up to before you run it.
+
+```bash
+tangent config --config tangent.yaml
+```
+
+**Options**
+
+* `--config <file>` (required): the config to print.
+
+**Output**
+
+The output starts with the files it was merged from, in order, the file you named last. Paths that are relative to the file that names them (a plugin's `path`, an inference node's `prompt_file`, an enrichment table's `path`) are printed absolute.
+
+```yaml
+# merged from, in order:
+#   tangent.yaml
+# secrets (tokens, api_key, webhook_url, passwords) are left out: read it, don't run it
+runtime:
+  batch_size: 256
+  batch_age: 5
+  workers: 14
+  plugins_path: plugins/
+  # ...
+```
+
+Secret fields, such as tokens, `api_key`, `webhook_url`, and passwords, are left out, so the output is for reading, not for running.
+
+`tangent config` checks what `tangent run` checks before it starts: unknown keys, nodes that share a name, DAG edges to nodes that don't exist, and `required` enrichment tables whose file is missing. It exits non-zero and names the problem when one fails.
