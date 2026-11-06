@@ -39,6 +39,8 @@ tangent plugin compile --config tangent.yaml
 ```
 
 This writes `plugins/hellologs.component.wasm` and `plugins/hellologs.cwasm`.
+
+A Go plugin on Go 1.27 fails here, in `go run github.com/ethanblackburn/tangent-sdk-go/gen`: first run `go get github.com/ethanblackburn/tangent-sdk-go@62dde5589976` in `hellologs/` (see [tangent plugin compile](/cli/plugin/compile)).
   </Step>
   <Step title="Test">
 
