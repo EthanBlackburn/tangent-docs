@@ -17,6 +17,12 @@ Must be `s3`.
 Name of the destination S3 bucket, without an `s3://` prefix.
 </ParamField>
 
+<ParamField path="key_prefix" type="string">
+What each object's key starts with, before a `/` and the object's name. It's a strftime template, rendered in UTC when a write reaches the sink, as a [rolling file](/configuration/sinks/rolling-file) sink's `path` is, so `logs/cloudtrail/%Y/%m/%d` puts each day's objects under a prefix of their own (`%%` is a `%`). An object holds the records written that day, whatever times they carry, so a replay of last week's logs goes under today's date. Without a `key_prefix`, objects go to the bucket's root.
+
+It's a path in the bucket, and strftime is all that's rendered. `tangent run` and `tangent config` refuse a `key_prefix` that isn't a strftime template, holds a `{{ field }}`, starts with `/`, or has an empty (`//`), `.`, or `..` segment. A trailing `/` is fine: the key still has one `/` before the name. Quote a `key_prefix` that starts with `%`, as `key_prefix: "%Y/%m/%d"`, because YAML can't start an unquoted value with `%`.
+</ParamField>
+
 <ParamField path="region" type="string">
 AWS region of the bucket. If it's omitted, the AWS SDK's default resolution applies (environment variables, instance metadata, and so on).
 </ParamField>
@@ -78,14 +84,26 @@ sinks:
     max_file_age_seconds: 120
 ```
 
+## Example (a prefix per day)
+
+```yaml tangent.yaml icon=upload
+sinks:
+  archive:
+    type: s3
+    bucket_name: acme-logs
+    key_prefix: logs/cloudtrail/%Y/%m/%d   # logs/cloudtrail/2026/11/06/<ULID>.ndjson.zst
+    wal_path: /var/lib/tangent/wal
+```
+
 ---
 
 ## Durability and delivery
 
 * **At-least-once delivery**: records are appended to the local WAL, and a write is acked once it's there.
 * A WAL file is sealed by **size** (`object_max_bytes`) or **age** (`max_file_age_seconds`), then encoded and uploaded as one object.
-* Objects are named by a ULID, which sorts by time, plus the encoding's extension: for example `<ULID>.ndjson.zst` or `<ULID>.parquet`.
-* On restart, WAL files left open are sealed and uploaded, cut back to their last whole line.
+* Objects are named by a ULID, which sorts by time, plus the encoding's extension: for example `<ULID>.ndjson.zst` or `<ULID>.parquet`. An object's key is its rendered `key_prefix`, a `/`, and that name, as `logs/cloudtrail/2026/11/06/<ULID>.ndjson.zst`; without a `key_prefix`, the key is the name alone.
+* Each rendered prefix has a WAL file of its own, so an object never holds records from two prefixes. When the day turns in UTC, a `%d` prefix's writes start a new file, and the day before's is sealed by size or age as usual.
+* On restart, WAL files left open are sealed and uploaded, cut back to their last whole line. Each goes under the prefix rendered when it was written, even if the day has turned or `key_prefix` has changed since.
 
 ---
 

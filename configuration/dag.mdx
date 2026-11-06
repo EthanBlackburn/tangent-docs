@@ -80,5 +80,5 @@ A node can send to several targets: `to: [lake, baseline_builder, baseline_rende
 When a config is split across files with [`include:`](/configuration/include), the edges from every file add up. An edge that two files both give counts once, so no record is delivered twice.
 
 <Note>
-Up to release 0.1.9, an edge named each node with its kind, as `from: { kind: source, name: x }`, and an edge to a sink could carry a `key_prefix`. Both are gone. A config that still uses them fails to load with `dag[0].from: invalid type: map, expected a string`.
+Up to release 0.1.9, an edge named each node with its kind, as `from: { kind: source, name: x }`, and an edge to a sink could carry a `key_prefix`. Both are gone. A config that still uses them fails to load with `dag[0].from: invalid type: map, expected a string`. An `s3` sink's object prefix is now the sink's own [`key_prefix`](/configuration/sinks/s3), and a `rolling_file` sink's directory is its `path`.
 </Note>
