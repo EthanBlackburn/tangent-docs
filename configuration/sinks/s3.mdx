@@ -3,40 +3,38 @@ title: "S3"
 description: "Write processed records to an Amazon S3 bucket."
 ---
 
-The **S3 sink** uploads objects to S3 with durability via a local **write-ahead log (WAL)**.  
-Encoding, compression, object sizing, and concurrency are configured via common sink options.
+The **S3 sink** uploads objects to S3, with durability from a local **write-ahead log (WAL)**. Encoding, compression, and object size use the [common sink options](/configuration/sinks/overview#common-configuration).
 
 ---
 
 ## Schema
+
 <ParamField path="type" type="string" required>
-Must be set to `s3`.
+Must be `s3`.
 </ParamField>
 
 <ParamField path="bucket_name" type="string" required>
-Name of the destination S3 bucket (do **not** prefix with `s3://`).
+Name of the destination S3 bucket, without an `s3://` prefix.
 </ParamField>
 
 <ParamField path="region" type="string">
-AWS region for the bucket (optional).  
-If omitted, the AWS SDK’s default resolution is used (env vars, instance metadata, etc.).
+AWS region of the bucket. If it's omitted, the AWS SDK's default resolution applies (environment variables, instance metadata, and so on).
 </ParamField>
 
 <ParamField path="wal_path" type="string">
-Filesystem path for the sink’s write-ahead log (WAL).  
-Defaults to `/tmp/wal`.
+Directory for the sink's write-ahead log. Defaults to `/tmp/wal`.
 </ParamField>
 
 <ParamField path="max_file_age_seconds" type="int">
-Maximum age (in seconds) before a WAL file is rotated and flushed to S3.  
-Defaults to `60`.
+Longest time, in seconds, a WAL file stays open before it's sealed and uploaded. Defaults to `60`.
 </ParamField>
+
 <ParamField path="encoding" type="object">
-Controls how Tangent serializes records emitted by this source. See [Encoding](/configuration/sinks/encoding).
+How records are serialized. See [Encoding](/configuration/sinks/encoding).
 </ParamField>
 
 <ParamField path="compression" type="object">
-Controls how Tangent compresses payloads emitted by this source. See [Compression](/configuration/sinks/compression).
+How encoded objects are compressed. See [Compression](/configuration/sinks/compression).
 </ParamField>
 
 ---
@@ -49,16 +47,16 @@ sinks:
     type: s3
     bucket_name: my-bucket
     region: us-west-2
-    # common options
-    encoding: ndjson         # default
-    compression:             # default shown explicitly
+    encoding:                # the default, shown explicitly
+      type: ndjson
+    compression:             # the default, shown explicitly
       type: zstd
       level: 3
     wal_path: /tmp/wal
     max_file_age_seconds: 60
 ```
 
-## Example (Parquet + Gzip, Arrow schema)
+## Example (Parquet + Gzip)
 
 ```yaml tangent.yaml icon=upload
 sinks:
@@ -68,7 +66,11 @@ sinks:
     region: us-east-1
     encoding:
       type: parquet
-      schema: ./schemas/arrow_schema.json
+      record_column: record
+      schema:
+        ts: timestamp
+        source: string
+        _norm: { org: string, actor: string }
     compression:
       type: gzip
       level: 6
@@ -78,16 +80,17 @@ sinks:
 
 ---
 
-## Durability & Delivery
+## Durability and delivery
 
-* **At-least-once delivery**: records are appended to a local **WAL** before upload.
-* On restart or failure, the WAL is replayed and any incomplete objects are retried.
-* Rotation is triggered by **size** (`object_max_bytes`) or **time** (`max_file_age_seconds`).
+* **At-least-once delivery**: records are appended to the local WAL, and a write is acked once it's there.
+* A WAL file is sealed by **size** (`object_max_bytes`) or **age** (`max_file_age_seconds`), then encoded and uploaded as one object.
+* Objects are named by a ULID, which sorts by time, plus the encoding's extension: for example `<ULID>.ndjson.zst` or `<ULID>.parquet`.
+* On restart, WAL files left open are sealed and uploaded, cut back to their last whole line.
 
 ---
 
 ## See also
 
-* [`File` sink](/configuration/sinks/file) for local files
-* [`Blackhole` sink](/configuration/sinks/blackhole) for testing
+* [Rolling file sink](/configuration/sinks/rolling-file), the same files in a local directory
+* [Blackhole sink](/configuration/sinks/blackhole) for testing
 * [DAG configuration](/configuration/dag)

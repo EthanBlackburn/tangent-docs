@@ -1,22 +1,24 @@
 ---
 title: "Blackhole"
-description: "Sink data to"
+description: "Discard records."
 ---
 
-Blackhole sink drops data. It is used for Benchmarking.
+The **Blackhole sink** discards everything it gets. Use it for benchmarking, or to end a DAG whose plugin's effect is elsewhere (for example, in state).
 
 ---
 
 ## Schema
+
 <ParamField path="type" type="string" required>
-This should be set to `blackhole`
+Must be `blackhole`.
 </ParamField>
 
 ---
 
 ## Example
-```yaml
+
+```yaml tangent.yaml icon=upload
 sinks:
-  bench_blackhole:
+  blackhole:
     type: blackhole
 ```

@@ -1,60 +1,34 @@
 ---
 title: "Encoding"
-description: "Configure how Tangent formats and compresses sink output before upload."
+description: "How a sink serializes records before writing them."
 ---
 
-The `encoding` block defines **how Tangent serializes and compresses records** before writing them to a sink (e.g., S3, File).  
-It controls file format, schema handling (for Avro/Parquet), and data compression.
+The `encoding` block defines **how a sink serializes records** before it writes them: as NDJSON, a JSON array, Avro, or Parquet. Records travel through the pipeline as NDJSON, so `ndjson` is the default and costs nothing extra.
 
 ---
 
 ## Schema
+
 <ParamField path="encoding.type" type="string" required>
-Output format for serialized records.  
-Defaults to `ndjson`.
+Output format. Defaults to `ndjson`.
 
-**Options**
-- `ndjson` — newline-delimited JSON; one record per line  
-- `json` — standard JSON array of records  
-- `avro` — Apache Avro binary encoding (requires schema)  
-- `parquet` — Apache Parquet columnar format (requires schema)
+- `ndjson`: newline-delimited JSON, one record per line.
+- `json`: one JSON array of records per file.
+- `avro`: Apache Avro, with the schema given in `schema`.
+- `parquet`: Apache Parquet, with the columns given in `schema`.
+
+The [File sink](/configuration/sinks/file) takes `ndjson` only. Use a [rolling file](/configuration/sinks/rolling-file) or [S3](/configuration/sinks/s3) sink for the others.
 </ParamField>
 
-<ParamField path="encoding.schema" type="string">
-Path to a schema file required by `avro` and `parquet` formats.  
-Can point to a local `.avsc` (Avro) or `.json` (Arrow/Parquet) schema.
+<ParamField path="encoding.schema" type="string | map">
+Required for `avro` and `parquet`.
+
+- For `avro`, the Avro schema itself, as JSON text. Each record is written as an Avro map, so give a map schema, such as `{"type": "map", "values": "string"}`. A record schema isn't supported yet: it passes the check at startup, then every file fails to encode.
+- For `parquet`, the file's columns, in order, each a name and a type: `string`, `int` (64 bits), `float` (a double), `bool`, or `timestamp` (milliseconds in UTC, read from RFC 3339 text in any zone). A nested map of columns is a struct, for a nested object. Every column can be null.
 </ParamField>
 
-<ParamField path="compression" type="string | object">
-Configures compression for the encoded data.  
-Defaults to `zstd` with level `3`.
-
-**Options**
-- `none` — no compression  
-- `gzip` — standard Gzip (`.gz` extension, level 6 default)  
-- `zstd` — Zstandard (`.zst` extension, level 3 default)  
-- `snappy` — Snappy block compression (Avro-only)  
-- `deflate` — Deflate stream compression (Avro-only)
-
-**Examples**
-
-```yaml
-compression:
-  type: gzip
-  level: 6
-````
-
-```yaml
-compression:
-  type: zstd
-  level: 3
-```
-
-**Notes**
-
-* For **Avro** and **Parquet**, compression applies to **data blocks inside the file**, not the file as a whole.
-* Tangent automatically appends compression extensions when applicable (e.g. `.gz`, `.zst`).
-
+<ParamField path="encoding.record_column" type="string">
+For `parquet`: also keep each record, as its JSON line, in a string column of this name, so a query can still reach the fields the schema leaves out.
 </ParamField>
 
 ---
@@ -64,48 +38,66 @@ compression:
 ### NDJSON (default)
 
 ```yaml tangent.yaml icon=upload
-encoding:
-  type: ndjson
-  compression:
-    type: zstd
-    level: 3
+sinks:
+  out:
+    type: s3
+    bucket_name: my-bucket
+    encoding:
+      type: ndjson
+    compression:
+      type: zstd
+      level: 3
 ```
 
-### Parquet with Arrow schema
+### Parquet
 
 ```yaml tangent.yaml icon=upload
-encoding:
-  type: parquet
-  schema: ./schemas/arrow_schema.json
-  compression:
-    type: gzip
+sinks:
+  lake:
+    type: rolling_file
+    path: lake/logs/%Y/%m/%d/%H
+    wal_path: lake/wal
+    encoding:
+      type: parquet
+      record_column: record
+      schema:
+        ts: timestamp
+        source: string
+        _norm: { org: string, actor: string }
+    compression:
+      type: zstd
 ```
 
-### Avro with explicit schema
+A record the schema can't read (a field with a type the schema doesn't give it, a time Arrow can't parse) doesn't fail its file. It's kept in `record_column` with its typed columns null, or dropped if there's no record column or it isn't JSON. `tangent_sink_records_unfit_total{fate="kept"|"dropped"}` counts them.
+
+### Avro
 
 ```yaml tangent.yaml icon=upload
-encoding:
-  type: avro
-  schema: ./schemas/events.avsc
-  compression:
-    type: deflate
+sinks:
+  events_avro:
+    type: s3
+    bucket_name: my-bucket
+    encoding:
+      type: avro
+      schema: '{"type": "map", "values": "string"}'   # each record a map of strings
+    compression:
+      type: deflate
 ```
 
 ---
 
-## Defaults Summary
+## Defaults
 
-| Setting             | Default                 | Description               |
-| ------------------- | ----------------------- | ------------------------- |
-| `encoding.type`     | `ndjson`                | Newline-delimited JSON    |
-| `encoding.schema`   | —                       | Required for Avro/Parquet |
-| `compression.type`  | `zstd`                  | Data compression method   |
-| `compression.level` | `3` (zstd) / `6` (gzip) | Compression strength      |
+| Setting             | Default  |
+| ------------------- | -------- |
+| `encoding.type`     | `ndjson` |
+| `compression.type`  | `zstd`   |
+| `compression.level` | `3`      |
 
 ---
 
 ## See also
 
-* [S3 Sink](/configuration/sinks/s3)
-* [File Sink](/configuration/sinks/file)
 * [Compression](/configuration/sinks/compression)
+* [S3 Sink](/configuration/sinks/s3)
+* [Rolling file Sink](/configuration/sinks/rolling-file)
