@@ -1,29 +1,14 @@
 ---
 title: "Plugins"
-description: "Define plugins used by Tangent pipelines."
+description: "Declare the WASM plugins a pipeline runs."
 ---
 
-The **Plugins** section declares each WASM plugin and its configuration.  
-Each plugin is defined under a user-chosen key and referenced in the DAG.
-
----
-
-## Schema
-<ParamField path="module_type" type="string" required>
-Language used by the plugin. Options: `go`, `python`, `rust`.
-</ParamField>
-
-<ParamField path="path" type="string" required>
-Plugin entry point. For Go and Rust use `.`, for Python use a file name (e.g., `mapper.py`).
-</ParamField>
-
-<ParamField path="tests" type="list">
-List of input/expected test pairs. `input` and `expected` are filepaths.
-</ParamField>
+The `plugins` block declares each WASM plugin under a name of your choosing. The [DAG](/configuration/dag) refers to the plugin by that name, and the compiled plugin is `<name>.component.wasm` (and `<name>.cwasm`) in [`runtime.plugins_path`](/configuration/runtime).
 
 ---
 
 ## Example
+
 ```yaml tangent.yaml icon=settings
 plugins:
   golang:
@@ -32,11 +17,94 @@ plugins:
     tests:
       - input: tests/input.json
         expected: tests/expected.json
-````
+```
 
 ---
 
-### 🧠 Notes
+## Schema
 
-* The plugin name (`golang` above) is referenced in the DAG.
-* Test files are optional but recommended for validating mappers.
+<ParamField path="module_type" type="string" required>
+The plugin's language: `go`, `python`, or `rust`.
+</ParamField>
+
+<ParamField path="path" type="string">
+The plugin's source, relative to the file that names it. For Go and Rust this is the directory (`.`), and for Python it's the module file (`mapper.py`). `tangent plugin compile` builds from here. A plugin with `prebuilt` doesn't need a `path`.
+</ParamField>
+
+<ParamField path="prebuilt" type="object">
+Where the plugin is published already compiled, so a machine without the WASM toolchain can run it. [`tangent plugin fetch`](/cli/plugin/fetch) downloads the component from a GitHub release and checks GitHub's attestation of its build before keeping it.
+
+- `repo` (required): the GitHub repository, `owner/name`.
+- `release`: the release tag. Defaults to `v` and this tangent's own version (`tangent --version`).
+- `asset`: the asset's file name. Defaults to `<plugin>.component.wasm`.
+- `workflow`: the workflow that must have signed it, such as `.github/workflows/attest-packs.yml`. Defaults to any workflow of `repo`.
+- `sha256`: the component's digest, to pin it beyond its attestation.
+- `host`: the GitHub host, for GitHub Enterprise. Defaults to `github.com`.
+</ParamField>
+
+<ParamField path="tests" type="list">
+Fixtures for [`tangent plugin test`](/cli/plugin/test): each has an `input` and an `expected` file path, relative to the file that names them. A test can also name its own `enrichment_tables`, which replace the config's tables of the same name for that test.
+</ParamField>
+
+<ParamField path="config" type="map">
+Settings the plugin reads through the `config` interface: `config.get(key)` returns a string as written, and any other value as JSON text.
+</ParamField>
+
+<ParamField path="state_namespace" type="string">
+The plugin's own state namespace. When it's unset, every plugin shares the namespace `plugins`. Set it when two plugins, or two instances of one plugin with different configs, must not see each other's keys. See [State](/configuration/runtime#state).
+</ParamField>
+
+<ParamField path="data" type="string">
+A directory, relative to the file that names it, that's mounted read-only at `/data` inside the plugin. Use it for reference data too big for `config`. Each plugin instance on each worker reads such files into its own memory, so for data that several plugins read, or that's large, use an [enrichment table](/configuration/enrichment-tables) instead.
+</ParamField>
+
+<ParamField path="drop_on_error" type="bool">
+What happens to a batch when the plugin's call fails (it traps or returns an error). When `true` (the default), the records are logged and dropped. When `false`, they pass on unchanged, as if the plugin weren't there. `false` suits a plugin that only adds to records, and is wrong for a filter. `tangent plugin test` always drops, so a failed call fails the test.
+</ParamField>
+
+---
+
+## Grouping records
+
+A plugin can take its records one group at a time:
+
+```yaml tangent.yaml icon=settings
+plugins:
+  renderer:
+    module_type: rust
+    path: ./renderer
+    group_by: [_norm.org, _norm.actor]   # a group per value of these fields
+    max_events: 40                       # closes at 40 records,
+    expire_after_ms: 30000               # or once nothing has joined it for 30 s (the default),
+    max_age_ms: 600000                   # or 10 minutes after it opened, however busy its key
+    history: 39                          # the key's latest records, sent again ahead of its next group
+```
+
+<ParamField path="group_by" type="list of strings">
+Fields whose values key a group. When it's empty (the default), records aren't grouped.
+</ParamField>
+
+<ParamField path="max_events" type="int">
+A group closes when it holds this many records. When it's unset, only time closes a group.
+</ParamField>
+
+<ParamField path="expire_after_ms" type="int">
+A group closes once no record has joined it for this long. Defaults to `30000`.
+</ParamField>
+
+<ParamField path="max_age_ms" type="int">
+A group closes this long after it opened, no matter how often records join it. Unset by default.
+</ParamField>
+
+<ParamField path="history" type="int">
+How many of a key's latest records to keep in the state store (namespace `groups`). They're sent again ahead of the key's next group, marked `"_context": true`, so the plugin sees what came before. Defaults to `0`.
+</ParamField>
+
+Records that reach a grouping plugin wait in memory in their key's group and are acked there. A closed group reaches the plugin whole, in one call, on workers of the plugin's own. That way a slow plugin, or a model after it, never holds up the nodes that feed it, and only one group per key is out at a time. When input ends (`--once`, or a shutdown), every open group closes. A crash loses the groups that are still open.
+
+---
+
+## Notes
+
+* The plugin name (`golang` above) is what the DAG refers to. It can't also be the name of a source, inference node, or sink.
+* A plugin that two included files define the same way is one plugin, loaded once per worker.

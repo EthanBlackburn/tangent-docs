@@ -15,7 +15,8 @@ Tangent ships as a single executable, `tangent`.
     <CodeGroup>
 
     ```bash curl
-    curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Santiago-Labs/tangent/releases/download/latest/tangent-cli-installer.sh | sh
+    curl --proto '=https' --tlsv1.2 -LsSf https://github.com/EthanBlackburn/tangent/releases/latest/download/tangent-cli-installer.sh | sh
+    tangent --version
     ```
 
     </CodeGroup>
@@ -26,6 +27,7 @@ Tangent ships as a single executable, `tangent`.
     ```bash sh
     brew tap telophasehq/telophase
     brew install tangent-cli
+    tangent --version
     ```
 
     </CodeGroup>
@@ -50,3 +52,11 @@ Tangent ships as a single executable, `tangent`.
     </CodeGroup>
   </Tab>
 </Tabs>
+
+<Warning>
+These docs follow tangent's `main` branch. The latest release, 0.1.9, predates [`include:`](/configuration/include), [enrichment tables](/configuration/enrichment-tables), [packs](/packs/overview), and DAG edges that name nodes alone (`from: cloudtrail`). Until the next release, install with Cargo, or build from a checkout with `cargo install --path crates/cli --locked`.
+</Warning>
+
+## Plugin toolchains
+
+Running a pipeline needs only `tangent`. Compiling a plugin also needs its language's toolchain (TinyGo, componentize-py, or cargo-component, plus wasm-tools). A scaffolded plugin's `setup.sh` installs them. See [CLI dependencies](/cli/overview#dependencies).

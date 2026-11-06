@@ -1,22 +1,30 @@
 ---
 title: 'tangent plugin compile'
-description: 'Compile WASM Plugin'
+description: 'Compile the plugins a config names to WASM.'
 mode: "center"
 ---
 
-`compile-wasm` builds your plugin into a `.wasm` artifact the runtime can load.
+`tangent plugin compile` builds each plugin a config names into a WASM component the runtime can load.
 
 ```bash
-tangent plugin compile --config tangent.yaml --wit .tangent/wit
-````
+tangent plugin compile --config tangent.yaml
+```
 
-**Command Options**
+**Options**
 
-* `--config <file>` (required) Path to `tangent.yaml`
-* `--wit <dir>` (optional) Path to the WIT interfaces used by your plugin. If using a plugin generated from `tangent plugin scaffold`, the wit path is `.tangent/wit`
+* `--config <file>` (required): the config whose plugins to compile. Each plugin's `path` and `module_type` say what to build.
+* `--plugin <name>`: compile only this plugin.
+* `--wit <dir>`: compile every plugin against this WIT directory (with the `processor` world). Without it, `compile` first writes this tangent's own WIT into each plugin's `.tangent/wit`, so a plugin always builds against the interface of the tangent that compiles it.
 
-**Outputs**
+**Outputs**, in [`runtime.plugins_path`](/configuration/runtime) (`plugins/` by default), relative to the config:
 
-* `./plugins/<name>.component.wasm` (default) — consumed by `tangent run`
+* `<name>.component.wasm`: the portable component
+* `<name>.cwasm`: the component precompiled for this machine, which `tangent run` loads
+
+A plugin with `prebuilt` and no `path` is skipped: [`tangent plugin fetch`](/cli/plugin/fetch) gets it.
+
+<Note>
+A Go plugin scaffolded by tangent 0.1.9 pins Go SDK `cda85d226be0`, whose code generator fails on Go 1.27 with `internal error: package "github.com/ethanblackburn/tangent-sdk-go" without types was imported`. The SDK's `main` has the same generator, so `@latest` doesn't help. Either update the SDK in the plugin's directory to the commit that fixes it, `go get github.com/ethanblackburn/tangent-sdk-go@62dde5589976`, or compile with Go 1.25: `GOTOOLCHAIN=go1.25.4 tangent plugin compile --config tangent.yaml`.
+</Note>
 
 See also: [tangent plugin test](/cli/plugin/test), [tangent run](/cli/run).

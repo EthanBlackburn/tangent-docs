@@ -3,6 +3,12 @@ title: "Community Plugins"
 mode: "center"
 ---
 
+Plugins shared in [tangent-plugins](https://github.com/EthanBlackburn/tangent-plugins), most of them mapping a source's logs to [OCSF](https://ocsf.io). For tangent's own normalizers for security logs, see [Packs](/packs/overview).
+
+<Note>
+These plugins' example `tangent.yaml` files still write DAG edges the 0.1.9 way, `from: { kind: source, name: socket_main }`. With a newer tangent, write each edge with names alone, `from: socket_main` and `to: [cloudtrail]`. See [DAG](/configuration/dag).
+</Note>
+
 ### OCSF
 **AWS**
 - [Cloudtrail](https://github.com/EthanBlackburn/tangent-plugins/tree/main/aws-ocsf/cloudtrail)

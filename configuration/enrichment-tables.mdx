@@ -1,0 +1,73 @@
+---
+title: "Enrichment tables"
+description: "Reference data loaded once per process and shared by every plugin."
+---
+
+An **enrichment table** is reference data that every plugin can read, loaded once for the whole process: an IP database, a list of networks, a company profile. Each table has a name, a `type`, and a `path` relative to the file that names it:
+
+```yaml tangent.yaml icon=settings
+enrichment_tables:
+  geo:      { type: mmdb, path: data/GeoLite2-Country.mmdb }
+  asn:      { type: mmdb, path: data/GeoLite2-ASN.mmdb }
+  networks: { type: cidr, path: data/networks.csv }
+  profile:  { type: document, path: profile/profile.yaml, required: true }
+```
+
+---
+
+## Schema
+
+<ParamField path="type" type="string" required>
+`mmdb`, `cidr`, or `document`. See [Table types](#table-types).
+</ParamField>
+
+<ParamField path="path" type="string" required>
+The file, relative to the file that names it.
+</ParamField>
+
+<ParamField path="required" type="bool">
+When `true`, the file must exist: without it, `tangent run`, `tangent plugin test`, and `tangent config` stop and name the table and the file. Use it for data that nothing is right without, such as a company profile. Defaults to `false`.
+</ParamField>
+
+---
+
+## Looking a key up
+
+A plugin looks up a key in a table by name through the `enrichment` interface, and gets JSON back or nothing:
+
+```rust
+use tangent::logs::enrichment::lookup;
+
+let geo = lookup("geo", ip);              // Some(r#"{"country":{"iso_code":"FI",...},...}"#)
+let nets = lookup("networks", ip);        // Some(r#"["aws","datacenter"]"#), None when in none
+let org = lookup("profile", "org");       // Some(r#""acme""#)
+```
+
+Each lookup is one call, so a plugin that knows three fields holding addresses looks up all three.
+
+## Table types
+
+| `type` | file | key | answer |
+|---|---|---|---|
+| `mmdb` | a MaxMind DB | an address | its record, as JSON |
+| `cidr` | `prefix,label` lines, IPv4 and IPv6; `#` comments; a bare address is its own /32 or /128 | an address | the label of every prefix that holds it, as a list. Each label appears once, in the order labels first appear in the file, so list the labels that should win first. |
+| `document` | YAML, or JSON when the name ends in `.json` | a dotted path, with `[n]` or `.n` for a list item, or `""` for all of it | the value there |
+
+An IPv4-mapped IPv6 address (`::ffff:203.0.113.7`) is looked up as the IPv4 address. An IPv6 prefix holds no IPv4 address, however wide (`::/0`), and `::ffff:192.0.2.0/120` is the IPv4 prefix it maps. A key that isn't an address, a path that isn't there, and a null all answer nothing.
+
+The runtime knows these three formats and nothing about what's in them. Convert a provider's own format beforehand. For example, [examples/enrich/setup.sh](https://github.com/EthanBlackburn/tangent/blob/main/examples/enrich/setup.sh) fetches GeoLite2, the AWS, GCP, and Cloudflare ranges, datacenter and VPN lists, and the Tor exit list, and writes the ranges into `data/networks.csv`.
+
+---
+
+## Loading
+
+`tangent run` reads every table when it builds the DAG, before the first record, into one copy that every worker and every plugin shares. Two plugins, or two packs, that read GeoLite2 hold it in memory once, and a lookup is a search in that memory, with no file read and no lock. A file that two tables name with the same type is read once.
+
+* A missing file is a warning, once, and its table answers nothing (unless the table is `required`).
+* A file that exists but can't be read as its type stops `tangent run`, naming the table and the file.
+* A table that no config defines answers nothing, with a warning the first time a plugin asks for it.
+* A refreshed file is picked up at the next start.
+
+`tangent plugin test` loads the tables the config declares, so a fixture runs against the same data. A test can also name tables of its own (`tests: [{ input, expected, enrichment_tables: {...} }]`), which replace the config's tables of the same name for that test. That way a pack's fixtures pass in any config that includes the pack.
+
+A plugin built before the interface existed doesn't import it and runs as before. To call it from an existing plugin, compile the plugin again.

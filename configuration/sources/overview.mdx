@@ -1,66 +1,77 @@
 ---
 title: "Overview"
-description: "Ingest data from sockets, queues, files, or streaming systems."
+description: "Ingest data from TCP, sockets, files, queues, streams, and providers' audit-log APIs."
 ---
 
-Sources define **where Tangent reads data from** — for example, a local Unix socket, Amazon SQS queue, file, or Kafka/MSK topic.  
-Each source reads raw bytes, applies a configured [`decoding`](/configuration/sources/decoding) policy, and emits structured records into Tangent’s pipeline.
-
----
-
-## Source Types
-
-| Type | Description | Example |
-|------|--------------|----------|
-| [`socket`](/configuration/sources/socket) | Local Unix domain socket (fastest for local ingestion) | `/tmp/sidecar.sock` |
-| [`file`](/configuration/sources/file) | Read structured logs from local or mounted files | `/var/log/app/access.log` |
-| [`msk`](/configuration/sources/msk) | Consume from Amazon MSK (Kafka) topics | `b-1.example.com:9092` |
-| [`sqs`](/configuration/sources/sqs) | Poll messages from Amazon SQS queues | `https://sqs.us-east-1.amazonaws.com/...` |
+Sources define **where Tangent reads data from**. Each source is declared under a name of your choosing in `sources:`, and the [DAG](/configuration/dag) sends its records on by that name.
 
 ---
 
-## Common Configuration
+## Source types
 
-Every source supports a few shared parameters:
+| Type | Reads | Docs |
+|------|-------|------|
+| `tcp` | NDJSON over TCP | [TCP](/configuration/sources/tcp) |
+| `socket` | NDJSON over a local Unix domain socket | [Socket](/configuration/sources/socket) |
+| `file` | one file, read once at start | [File](/configuration/sources/file) |
+| `msk` | a Kafka topic on Amazon MSK | [MSK](/configuration/sources/msk) |
+| `sqs` | messages from an Amazon SQS queue | [SQS](/configuration/sources/sqs) |
+| `cloudtrail` | a CloudTrail trail's files, every account of an organization trail | [packs/aws](https://github.com/EthanBlackburn/tangent/tree/main/packs/aws#use-it) |
+| `github_audit` | a GitHub organization's audit log API | [packs/github](https://github.com/EthanBlackburn/tangent/tree/main/packs/github) |
+| `okta` | Okta's System Log API | [packs/okta](https://github.com/EthanBlackburn/tangent/tree/main/packs/okta) |
+| `google_workspace` | Google Workspace login, token, Drive, and admin activity | [packs/google_workspace](https://github.com/EthanBlackburn/tangent/tree/main/packs/google_workspace) |
+| `github_webhook` | GitHub webhook deliveries over HTTP | [examples/githubwebhooks](https://github.com/EthanBlackburn/tangent/tree/main/examples/githubwebhooks) |
+| `sqlite` | one partition of a `sqlite` sink's table, read back in batches | [README](https://github.com/EthanBlackburn/tangent#keeping-records-and-reading-them-back) |
+
+The `cloudtrail`, `github_audit`, `okta`, and `google_workspace` sources are what the [packs](/packs/overview) read. The pack's README lists each one's config block and the credentials it needs.
+
+---
+
+## Common configuration
 
 <ParamField path="type" type="string" required>
-Selects the source type.  
-One of: `socket`, `file`, `msk`, or `sqs`.
+Selects the source type, from the table above.
 </ParamField>
 
 <ParamField path="decoding" type="object">
-Defines how incoming bytes are parsed into structured records.  
-See [Decoding](/configuration/sources/decoding) for format and compression options.
+How the `file`, `msk`, and `sqs` sources parse the bytes they read: format and compression. These three require it. See [Decoding](/configuration/sources/decoding).
 </ParamField>
+
+Each source type accepts only its own keys. A misspelled key is an error, not a silent default.
 
 ---
 
-## Example (MSK Source)
+## Example
 
 ```yaml tangent.yaml icon=download
 sources:
+  events:
+    type: tcp
+    bind_address: 0.0.0.0:9000
   kafka_in:
     type: msk
     bootstrap_servers: "b-1.example.com:9092,b-2.example.com:9092"
     topic: logs
-    group_id: tangent-node
+    auth:
+      mode: scram
+      username: tangent
+      password: "${MSK_PASSWORD}"
     decoding:
-      format: ndjson
-      compression: auto
-````
+      format: { type: ndjson }
+```
 
 ---
 
 ## Behavior
 
-* Each source runs in its own async worker, managed by Tangent’s runtime.
-* Data is read continuously, batched in memory, and flushed based on runtime settings (`batch_size` / `batch_age`).
-* Decoding and optional re-encoding happen before the data enters the plugin or sink DAG.
+* Each source runs on its own task in the runtime.
+* Records are batched in memory and flushed to the workers by size or age ([`batch_size` and `batch_age`](/configuration/runtime)).
+* A source's name can't also name a plugin, inference node, or sink.
 
 ---
 
 ## See also
 
 * [Decoding](/configuration/sources/decoding)
-* [Runtime Configuration](/configuration/runtime)
+* [Runtime](/configuration/runtime)
 * [DAG](/configuration/dag)

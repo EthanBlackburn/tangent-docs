@@ -1,33 +1,32 @@
 ---
 title: "SQS"
-description: "Ingest logs and messages from Amazon SQS queues."
+description: "Ingest messages from an Amazon SQS queue, or the S3 objects its notifications name."
 ---
 
-The **SQS source** allows Tangent to consume messages directly from an Amazon Simple Queue Service (SQS) queue.  
-This is useful for event-driven pipelines, asynchronous log forwarding, or integrating with other AWS services that publish to SQS.
+The **SQS source** consumes messages from an Amazon Simple Queue Service (SQS) queue. A message can carry records itself, or be an S3 event notification, in which case Tangent reads the objects it names.
 
 ---
 
 ## Schema
+
+<ParamField path="type" type="string" required>
+Must be `sqs`.
+</ParamField>
+
 <ParamField path="queue_url" type="string" required>
-The full URL of the SQS queue to poll.  
-Example: `https://sqs.us-east-1.amazonaws.com/123456789012/my-queue`
+The full URL of the SQS queue to poll, such as `https://sqs.us-east-1.amazonaws.com/123456789012/my-queue`.
+</ParamField>
+
+<ParamField path="decoding" type="object" required>
+How to parse a message body, or an S3 object's bytes. See [Decoding](/configuration/sources/decoding).
 </ParamField>
 
 <ParamField path="wait_time_seconds" type="int">
-Long polling duration in seconds.  
-Controls how long Tangent waits for messages before returning an empty response.  
-Defaults to `20`.
+Long-polling duration in seconds: how long Tangent waits for messages before an empty response. Defaults to `20`.
 </ParamField>
 
 <ParamField path="visibility_timeout" type="int">
-The duration (in seconds) that a message remains invisible to other consumers after Tangent retrieves it.  
-Defaults to `60`.
-</ParamField>
-
-<ParamField path="decoding" type="object">
-Controls how Tangent parses message payloads after retrieval.  
-See [Decoding](/configuration/sources/decoding) for supported formats (`json`, `ndjson`, `msgpack`, etc.).
+How long, in seconds, a message stays invisible to other consumers after Tangent receives it. Defaults to `60`.
 </ParamField>
 
 ---
@@ -42,36 +41,30 @@ sources:
     wait_time_seconds: 20
     visibility_timeout: 60
     decoding:
-      format: json
-      compression: auto
-````
+      format: { type: json }
+      compression: { type: auto }
+```
 
 ---
 
 ## Behavior
 
-* Tangent uses the AWS SDK to long-poll the specified queue for messages.
-* When a message arrives:
-
-  * The payload is decoded according to the `decoding` configuration.
-  * Each decoded record is passed into the pipeline.
-* Messages are automatically deleted after successful processing.
-* Visibility timeouts prevent duplicate processing in concurrent consumers.
+* Tangent long-polls the queue with the AWS SDK and its default credential chain.
+* When a message body is an S3 event notification (a `Records` list naming `s3.bucket.name` and `s3.object.key`), Tangent reads each object and decodes it. With `compression: { type: auto }`, the object's `Content-Encoding`, its key's suffix, or its magic bytes say whether it's compressed.
+* Otherwise, the message body itself is decoded.
+* A message is deleted once its records are through the pipeline. A message that isn't deleted before its visibility timeout is delivered again.
 
 ---
 
-## Best Practices
+## Best practices
 
-* **Keep `wait_time_seconds` high (e.g., 20s)** to reduce API calls and costs.
-* **Ensure the IAM role or credentials** used by Tangent have `sqs:ReceiveMessage` and `sqs:DeleteMessage` permissions.
-* **Tune `visibility_timeout`** to be slightly longer than your typical plugin or sink processing time to avoid message re-delivery.
-* Use `decoding.format: json` or `ndjson` for structured logs, or `text` for plain message bodies.
+* **Keep `wait_time_seconds` high (for example, 20)** to reduce API calls and costs.
+* **Give Tangent's credentials** `sqs:ReceiveMessage` and `sqs:DeleteMessage` on the queue, and `s3:GetObject` on the buckets its notifications name.
+* **Set `visibility_timeout`** longer than your typical processing time, so messages aren't delivered twice.
 
 ---
 
 ## See also
 
 * [Decoding](/configuration/sources/decoding)
-* [Socket Source](/configuration/sources/socket)
-* [MSK Source](/configuration/sources/msk)
 * [DAG configuration](/configuration/dag)

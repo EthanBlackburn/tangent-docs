@@ -18,8 +18,9 @@ In practice, end‑to‑end throughput is dominated by user logic, not Wasm over
 
 ## Architecture at a glance
 
-- **Sources → Workers → Plugins → Sinks**
-- Workers group records by configured mappers/selectors, invoke guest components in batches, then the router fans out results to sinks.
+- **Sources → Workers → Plugins and inference nodes → Sinks**, wired by name in the [DAG](/configuration/dag).
+- Workers batch records, hand each plugin the records its selectors match, invoke guest components in batches, call inference nodes in DAG order, then the router fans out results to the next nodes and sinks.
+- A plugin with [`group_by`](/configuration/plugins#grouping-records) gets its records a group at a time, on workers of its own, so a slow plugin or a model after it never holds up what feeds it.
 
 ## Data movement and copying
 
@@ -84,7 +85,7 @@ Practical implication: we get zero‑copy access to JSON fields, and the cost of
 
 ### Router behavior
 
-- The router maps a `NodeRef` (plugin) to one or more downstream nodes (plugins or sinks).
+- The router maps each node to the nodes its DAG edges name: plugins, inference nodes, or sinks.
 - If there is a single downstream, the frame is forwarded directly.
 - If there are multiple downstreams, frames are duplicated per downstream delivery. Today, duplication happens at the frame boundary; this is a conscious trade‑off for simplicity and isolation of downstream stages.
 
@@ -109,7 +110,7 @@ Guidelines for authors:
 - Pull as few scalars as possible; prefer host‑side selectors for filtering.
 - Avoid building owned maps/arrays in the guest if you only need a subset of fields.
 - When emitting output, write in a single pass into a contiguous buffer; avoid per‑field allocations.
-- Keep `process_logs` pure and side‑effect free; move I/O to sinks for better parallelism and backpressure.
+- Keep `process_logs` free of I/O where you can; move output to sinks for better parallelism and backpressure. When a plugin needs state or a remote call, use the host's `state` and `remote` interfaces, and batch remote calls.
 
 ## Observability
 

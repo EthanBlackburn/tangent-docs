@@ -1,17 +1,20 @@
 ---
 title: "Socket"
-description: "Ingest logs from a local Unix domain socket."
+description: "Ingest NDJSON from a local Unix domain socket."
 ---
 
-The **Socket source** allows Tangent to consume logs from a local Unix domain socket (UDS).  
-This is the simplest way to connect local producers (e.g. agents, sidecars, or log forwarders) directly to Tangent.
+The **Socket source** reads logs from a local Unix domain socket (UDS). It's a simple way to connect local producers, such as agents, sidecars, or log forwarders, directly to Tangent.
 
 ---
 
 ## Schema
-<ParamField path="socket_path" type="string" required>
-Path to the Unix domain socket used for ingestion.  
-Defaults to `/tmp/sidecar.sock`.
+
+<ParamField path="type" type="string" required>
+Must be `socket`.
+</ParamField>
+
+<ParamField path="socket_path" type="string">
+Path to the Unix domain socket to listen on. Defaults to `/tmp/sidecar.sock`. A socket's path has to be shorter than about 100 bytes (104 on macOS, 108 on Linux). A longer one logs `socket listener error: path must be shorter than SUN_LEN`, and the pipeline runs on without the source, so use a short absolute path or one relative to the working directory.
 </ParamField>
 
 ---
@@ -23,34 +26,29 @@ sources:
   socket_main:
     type: socket
     socket_path: "/tmp/sidecar.sock"
-    decoding:
-      format: ndjson
-      compression: auto
-````
+```
 
 ---
 
 ## Behavior
 
-* Tangent listens on the provided socket path and accepts connections from any local producer process.
-* Producers can write NDJSON or JSON payloads to the socket — Tangent decodes them according to the configured `decoding` section.
-* When the source closes, Tangent flushes any buffered messages before shutdown.
+* Tangent listens on the socket path and accepts connections from any local process.
+* Producers write newline-delimited JSON, one object per line. The socket source takes no `decoding` block.
+* When the source closes, Tangent flushes any buffered records before shutdown.
 
 ---
 
-## Common Use Cases
+## Common use cases
 
-| Use Case                 | Example                                                               |
-| ------------------------ | --------------------------------------------------------------------- |
-| Local log forwarder      | An app writes logs to `/tmp/sidecar.sock` instead of stdout           |
-| Sidecar integration      | Send structured logs from a container to Tangent                      |
-| Testing and benchmarking | Use the Tangent CLI to `bench` or `run` against a local socket source |
+| Use case                 | Example                                                             |
+| ------------------------ | ------------------------------------------------------------------- |
+| Local log forwarder      | An app writes logs to `/tmp/sidecar.sock` instead of stdout         |
+| Sidecar integration      | Send structured logs from a container to Tangent                    |
+| Testing and benchmarking | `tangent bench` drives a config's socket source as it does a TCP one |
 
 ---
 
 ## See also
 
-* [Decoding](/configuration/sources/decoding)
-* [MSK Source](/configuration/sources/msk)
-* [SQS Source](/configuration/sources/sqs)
+* [TCP Source](/configuration/sources/tcp)
 * [DAG configuration](/configuration/dag)

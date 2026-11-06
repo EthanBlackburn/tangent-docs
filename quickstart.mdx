@@ -1,48 +1,72 @@
 ---
 title: "Quickstart"
-description: "Build, run, and ship a WASM log processor in minutes."
+description: "Build, run, and benchmark a WASM log processor in minutes."
 mode: "center"
 ---
 
 ## Goal
 
-Create a WASM plugin, run the pipeline locally, then benchmark it.
+Create a WASM plugin, test it, run the pipeline locally, then benchmark it.
 
 <Steps>
   <Step title="Install Tangent">
 
-```bash curl
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Santiago-Labs/tangent/releases/download/latest/tangent-cli-installer.sh | sh
+```bash
+cargo install --git https://github.com/EthanBlackburn/tangent tangent-cli
 ```
+
+See [Installation](/install) for other ways to install.
   </Step>
   <Step title="Scaffold a plugin">
 
 ```bash
-# Create a new plugin in Go, Python, or Rust
+# Create a new plugin in Python, Go, or Rust
+tangent plugin scaffold --lang python --name hello-logs
+# or:
 tangent plugin scaffold --lang go --name hello-logs
 # or:
-tangent plugin scaffold --lang py --name hello-logs
-# or:
 tangent plugin scaffold --lang rust --name hello-logs
+
+cd hellologs
 ```
-Scaffold creates a minimal working plugin with tests.
+
+Scaffold creates a minimal working plugin in `hellologs/` (dashes are dropped from the name), with tests and a `tangent.yaml` that wires a TCP source on port 9000 through the plugin to a `blackhole` sink. If the language's toolchain isn't installed yet, run `./setup.sh` in the new directory.
   </Step>
   <Step title="Compile">
+
 ```bash
-tangent plugin compile --config tangent.yaml --wit .tangent/wit
+tangent plugin compile --config tangent.yaml
 ```
+
+This writes `plugins/hellologs.component.wasm` and `plugins/hellologs.cwasm`.
+
+A Go plugin on Go 1.27 fails here, in `go run github.com/ethanblackburn/tangent-sdk-go/gen`: first run `go get github.com/ethanblackburn/tangent-sdk-go@62dde5589976` in `hellologs/` (see [tangent plugin compile](/cli/plugin/compile)).
+  </Step>
+  <Step title="Test">
+
+```bash
+tangent plugin test --config tangent.yaml
+```
+
+The plugin's output for `tests/input.json` must match `tests/expected.json`.
   </Step>
   <Step title="Run the pipeline">
+
 ```bash
 tangent run --config tangent.yaml
 ```
 
-Your pipeline is now running. You can send data to the socket with
+Your pipeline is now running and listening on port 9000. Send it a record from another terminal, and see in the runtime's metrics that the plugin read it:
+
 ```bash
-tangent bench --config tangent.yaml --seconds 30 --payload tests/input.json
+echo '{"msg": "my log", "source": {"name": "myservice"}}' | nc -w 1 localhost 9000
+curl -s localhost:9184/metrics | grep tangent_guest_bytes_total
 ```
   </Step>
   <Step title="Benchmark">
+
+With the pipeline still running, in another terminal:
+
 ```bash
 tangent bench --config tangent.yaml --seconds 30 --payload tests/input.json
 ```
@@ -50,11 +74,13 @@ tangent bench --config tangent.yaml --seconds 30 --payload tests/input.json
 </Steps>
 
 ## Next steps
+
 Author plugins: [Authoring a WASM Plugin](/plugins/authoring)
 
-Real sinks: [S3](/configuration/sinks/s3), [File](/configuration/sinks/file)
+Watch real logs with a model: [Packs](/packs/overview), [Inference](/configuration/inference)
 
-Real sources: [SQS](/configuration/sources/sqs), [MSK](/configuration/sources/msk), [Socket](/configuration/sources/socket), [File](/configuration/sources/file)
+Real sources: [TCP](/configuration/sources/tcp), [SQS](/configuration/sources/sqs), [MSK](/configuration/sources/msk), [File](/configuration/sources/file)
 
-Learn the CLI: [tangent.yaml](/configuration/tangent-yaml)
+Real sinks: [S3](/configuration/sinks/s3), [Rolling file](/configuration/sinks/rolling-file), [File](/configuration/sinks/file)
 
+The config: [tangent.yaml](/configuration/tangent-yaml)

@@ -1,24 +1,33 @@
 ---
 title: 'tangent run'
-description: 'Tangent runtime'
+description: 'Start the Tangent runtime.'
 mode: "center"
 ---
 
-Start the runtime with your configured **sources → plugins → sinks**.
+Start the runtime with your configured **sources, plugins, inference nodes, and sinks**.
 
 ```bash
 tangent run --config tangent.yaml
-````
+```
+
+**Options**
+
+* `--config <file>` (required): the pipeline's config. Its [includes](/configuration/include) are merged first.
+* `--once`: exit after one drain cycle, once the sources' records are through. For tests, and one-off runs over a file.
 
 **What it does**
 
-* Pull data from **sources**
-* Passes data to **plugins**
-* Writes to the **sink** named in each output (or the **default** sink)
+* Loads the config and checks the DAG: every edge names a node that exists, no edge leaves a sink or enters a source, and no two nodes share a name. Any of these stops it before the first record.
+* Loads the [enrichment tables](/configuration/enrichment-tables) and the compiled plugins from `runtime.plugins_path`.
+* Reads from the **sources**, passes records through the **plugins** and **inference nodes** in DAG order, and writes to the **sinks** the DAG names.
+* Serves Prometheus metrics at `http://0.0.0.0:9184/metrics`.
+
+A first SIGINT or SIGTERM shuts the pipeline down: open groups close, the sinks flush, and the process exits. A second signal, a second or more after the first, exits at once.
 
 **Tips**
 
 * Use `RUST_LOG=info` (or `debug`) to see more runtime logs.
-* Start with the **File** or **Socket** source, then swap in SQS/MSK.
+* Run `tangent config --config tangent.yaml` first to see the merged config the runtime will read.
+* Start with the [TCP](/configuration/sources/tcp) or [File](/configuration/sources/file) source, then swap in the real one.
 
 See also: [tangent.yaml](/configuration/tangent-yaml), [bench](/cli/bench), [test](/cli/plugin/test).

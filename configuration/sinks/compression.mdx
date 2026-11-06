@@ -1,46 +1,41 @@
 ---
 title: "Compression"
-description: "Control how Tangent compresses data before writing to sinks."
+description: "How a sink compresses data before writing it."
 ---
 
-The `compression` block defines **how Tangent compresses serialized records** before they’re written to disk or uploaded to S3.  
-Compression can be configured globally under `encoding`, or inline within a specific sink.
+The `compression` block, set on a sink beside `encoding`, defines **how the sink compresses what it writes** to S3 or to a rolling file.
 
 ---
 
 ## Schema
-<ParamField path="compression.type" type="string" required>
-Specifies which compression algorithm to use.
 
-**Options**
-- `none` — no compression  
-- `gzip` — standard Gzip compression  
-- `zstd` — modern Zstandard compression (fast, high ratio)  
-- `snappy` — Snappy block compression (Avro-only)  
-- `deflate` — Deflate stream compression (Avro-only)
+<ParamField path="compression.type" type="string" required>
+The compression algorithm.
+
+- `none`: no compression.
+- `gzip`: Gzip.
+- `zstd`: Zstandard, fast with a high ratio. The default.
+- `snappy`: Snappy, for Avro.
+- `deflate`: Deflate, for Avro.
 </ParamField>
 
 <ParamField path="compression.level" type="int">
-Compression level (optional).  
-Defaults vary by algorithm:
+Compression level, optional.
 
-| Algorithm | Default | Range | Notes |
-|------------|----------|--------|--------|
-| `gzip` | `6` | `0–9` | Higher = smaller output, slower |
-| `zstd` | `3` | `1–22` | Higher = smaller output, slower |
-| `snappy` | — | — | Fixed speed/ratio |
-| `deflate` | — | — | Typically used for Avro data |
+| Algorithm | Default | Notes |
+|-----------|---------|-------|
+| `gzip` | `6` | `0` to `9`; higher is smaller and slower |
+| `zstd` | `3` | higher is smaller and slower |
 </ParamField>
 
 ---
 
 ## Behavior
 
-- For **NDJSON** and **JSON**, Tangent compresses the entire file object.  
-- For **Avro** and **Parquet**, compression applies to **data blocks** inside the file. The file itself is not additionally wrapped.
-- Tangent automatically appends appropriate file extensions:
-  - `.gz` for Gzip
-  - `.zst` for Zstd
+- For **NDJSON** and **JSON**, `gzip` and `zstd` compress the whole file, and Tangent appends `.gz` or `.zst` to its name.
+- For **Parquet**, compression applies to the data inside the file, and the file isn't wrapped again. Parquet takes `none`, `gzip`, or `zstd`.
+- For **Avro**, compression applies to the file's blocks. Avro takes `none`, `deflate`, `snappy`, or `zstd`. With `gzip`, Avro blocks are written uncompressed.
+- The [File sink](/configuration/sinks/file) doesn't compress.
 
 ---
 
@@ -49,45 +44,49 @@ Defaults vary by algorithm:
 ### Default (Zstandard level 3)
 
 ```yaml tangent.yaml icon=upload
-compression:
-  type: zstd
-  level: 3
-````
+sinks:
+  out:
+    type: s3
+    bucket_name: my-bucket
+    compression:
+      type: zstd
+      level: 3
+```
 
-### Gzip with level 9
+### Gzip at level 9
 
 ```yaml tangent.yaml icon=upload
-compression:
-  type: gzip
-  level: 9
+sinks:
+  out:
+    type: s3
+    bucket_name: my-bucket
+    compression:
+      type: gzip
+      level: 9
 ```
 
 ### No compression
 
 ```yaml tangent.yaml icon=upload
-compression:
-  type: none
+sinks:
+  out:
+    type: s3
+    bucket_name: my-bucket
+    compression:
+      type: none
 ```
 
 ---
 
-## Recommended Use
+## Recommended use
 
-| Scenario                      | Recommended Compression     |
+| Scenario                      | Compression                 |
 | ----------------------------- | --------------------------- |
 | High-throughput pipelines     | `zstd` (fast and efficient) |
-| Archival or long-term storage | `gzip`                      |
-| Avro or Parquet encoding      | `zstd` or `snappy`          |
+| Archival or long-term storage | `gzip` or `zstd`            |
+| Parquet                       | `zstd`                      |
+| Avro                          | `zstd`, `snappy`, or `deflate` |
 | Local testing                 | `none`                      |
-
----
-
-## Defaults Summary
-
-| Field               | Default | Description                        |
-| ------------------- | ------- | ---------------------------------- |
-| `compression.type`  | `zstd`  | Modern default for speed and ratio |
-| `compression.level` | `3`     | Balanced performance               |
 
 ---
 
@@ -95,4 +94,4 @@ compression:
 
 * [Encoding](/configuration/sinks/encoding)
 * [S3 Sink](/configuration/sinks/s3)
-* [File Sink](/configuration/sinks/file)
+* [Rolling file Sink](/configuration/sinks/rolling-file)

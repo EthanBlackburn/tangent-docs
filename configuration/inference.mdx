@@ -1,0 +1,168 @@
+---
+title: "Inference"
+description: "Ask a model about each record, as a node in the DAG."
+---
+
+An **inference node** asks a model about each record that reaches it. Inference nodes are configured under `inference:`, each with its own model and prompt, and they appear in the [DAG](/configuration/dag) by name, like any other node.
+
+```yaml tangent.yaml icon=settings
+inference:
+  judge:
+    url: http://localhost:8080/v1          # any OpenAI-compatible chat endpoint
+    model: mlx-community/GLM-4.7-Flash-4bit
+    prompt_file: judge.md                  # the system message
+    extra: { chat_template_kwargs: { enable_thinking: false } }
+```
+
+---
+
+## What the node does
+
+The records the node gets become the user message, one JSON object per line (the record, or only its `fields`) with its index `i`. With `encoding: { type: logfmt }`, each record is a logfmt line instead. The model replies with `{"answers": [...]}`. Each answer is a JSON object and lands on its record under the node's name (`judge` above). A failure lands there as `{"error": ...}`.
+
+The node adds and forwards. It never drops a record. What happens next is up to a plugin, and a plugin's `probe()` is already that filter: for example, a plugin that selects `judge.flag == true` keeps only what the model flagged.
+
+The reply is read as JSON and nothing else, and the backend is asked to make it so. With `schema_file` (a JSON Schema next to the prompt), the request uses `response_format` on an OpenAI-compatible server, or structured output on Bedrock. Without one, an `openai` server is put in JSON mode. If a server ignores both (`mlx_lm.server` does), the prompt is all that holds it to JSON, and a reply that isn't a JSON object becomes the error.
+
+Inference nodes run inside the workers, in DAG order with the plugins. A worker hands the model the records that reached the node, waits for the replies, and carries the records on, so a batch's records stay in order.
+
+---
+
+## Schema
+
+<ParamField path="model" type="string" required>
+The model id as the backend knows it, such as `mlx-community/GLM-4.7-Flash-4bit`.
+</ParamField>
+
+<ParamField path="prompt_file" type="string" required>
+The system prompt, relative to the file that names it.
+</ParamField>
+
+<ParamField path="backend" type="string">
+`openai` (the default) for any OpenAI-compatible chat completions endpoint, such as OpenAI, `mlx_lm.server`, `llama-server`, vLLM, or Bedrock's OpenAI endpoint. `bedrock` for Amazon Bedrock's Converse API with the AWS credential chain.
+</ParamField>
+
+<ParamField path="url" type="string">
+Base URL of the chat completions API, for the `openai` backend. Defaults to `http://localhost:8080/v1`.
+</ParamField>
+
+<ParamField path="api_key" type="string">
+Bearer token for the `openai` backend, such as `"${OPENAI_API_KEY}"`. [`tangent config`](/cli/config) leaves it out of its output.
+</ParamField>
+
+<ParamField path="aws" type="object">
+`region` and `profile` for the `bedrock` backend. Each falls back to the AWS SDK's default when unset.
+</ParamField>
+
+<ParamField path="schema_file" type="string">
+A JSON Schema the reply must satisfy, relative to the file that names it.
+</ParamField>
+
+<ParamField path="fields" type="list of strings">
+The record fields to show the model. When it's empty (the default), the model sees the whole record.
+</ParamField>
+
+<ParamField path="encoding" type="object">
+How records are written into the user message. `{ type: ndjson }` (the default) writes a JSON line per record. `{ type: logfmt }` writes a logfmt line per record, in about half the tokens, and the text decodes back to the records. See [logfmt](#logfmt) below.
+</ParamField>
+
+<ParamField path="group_by" type="list of strings">
+When set, a request holds only the records with one value of these fields, such as `[_norm.actor]`.
+</ParamField>
+
+<ParamField path="batch_bytes" type="int">
+A request past this many bytes of JSON is split. Defaults to `32768`.
+</ParamField>
+
+<ParamField path="max_tokens" type="int">
+The reply's token budget per record. Defaults to `2000`.
+</ParamField>
+
+<ParamField path="concurrency" type="int">
+Requests in flight to this node at once, across all workers. Use `1` for a laptop GPU and `8` or more for a hosted model. Defaults to `1`.
+</ParamField>
+
+<ParamField path="timeout_ms" type="int">
+A request that takes longer fails, which frees the concurrency slot it held. Defaults to `30000`. A local model may need more.
+</ParamField>
+
+<ParamField path="retries" type="int">
+Attempts after the first for a request that got no reply at all (a timeout, a connection or server error, an empty reply), backing off 1 s, 2 s, 4 s, and so on. A reply that isn't JSON isn't retried: it becomes the error. Defaults to `2`.
+</ParamField>
+
+<ParamField path="temperature" type="float">
+Sent only when set. Otherwise the model's default applies.
+</ParamField>
+
+<ParamField path="extra" type="map">
+Extra request parameters merged into the body, such as `chat_template_kwargs: { enable_thinking: false }` for `mlx_lm.server` or `reasoning_effort: low` for gpt-oss. These win over what the node sets.
+</ParamField>
+
+A reply that can't be read is asked again in halves.
+
+---
+
+## logfmt
+
+`encoding: { type: logfmt, keep: [...], sources: { <source>: { principal, time, keep, ids } } }` writes the records as logfmt lines. Records are grouped by principal, the fields a group shares are written once above its rows, the `keep` fields go on every row, and a day's timestamps are written as times of day. `budget_tokens` (90k by default) also splits a request. `sidecar: true` replaces a source's `ids` with references the model never sees. Core's judge has a row for each pack's sources in [`packs/core/judge.yaml`](https://github.com/EthanBlackburn/tangent/blob/main/packs/core/judge.yaml).
+
+---
+
+## Example: keep what a local model flags
+
+```yaml tangent.yaml icon=settings
+runtime:
+  workers: 1
+
+sources:
+  events:
+    type: tcp
+    bind_address: 0.0.0.0:9000
+
+inference:
+  judge:
+    backend: openai                 # the protocol, not the vendor
+    url: http://localhost:8080/v1
+    model: mlx-community/GLM-4.7-Flash-4bit
+    prompt_file: judge.md           # the reply lands on the record as judge
+    max_tokens: 300
+    timeout_ms: 120000
+    extra:
+      chat_template_kwargs:
+        enable_thinking: false
+
+plugins:
+  flagged:                          # keeps judge.flag == true
+    module_type: rust
+    path: flagged
+
+sinks:
+  flagged_out:
+    type: file
+    path: flagged.ndjson
+    compression:
+      type: none
+
+dag:
+  - from: events
+    to: [judge]
+  - from: judge
+    to: [flagged]
+  - from: flagged
+    to: [flagged_out]
+```
+
+Any OpenAI-compatible local server works, for example:
+
+```bash
+mlx_lm.server --model mlx-community/GLM-4.7-Flash-4bit --port 8080     # Apple silicon
+llama-server -hf unsloth/GLM-4.7-Flash-GGUF:Q4_K_M --port 8080         # llama.cpp, any OS
+```
+
+The complete example, with its prompt and the `flagged` plugin, is [examples/inference-local](https://github.com/EthanBlackburn/tangent/tree/main/examples/inference-local). [examples/inference-bedrock](https://github.com/EthanBlackburn/tangent/tree/main/examples/inference-bedrock) does the same with a model on Amazon Bedrock.
+
+---
+
+## Shutdown
+
+A signal (SIGINT or SIGTERM) ends the calls in progress instead of waiting out `timeout_ms` and `retries`. Records that were waiting on a call go to no sink and aren't acked. A second signal, a second or more after the first, exits immediately.

@@ -1,0 +1,23 @@
+---
+title: 'tangent state'
+description: 'Read a pipeline’s state store, even while it runs.'
+mode: "center"
+---
+
+`tangent state` reads a pipeline's [state store](/configuration/runtime#state). It's read-only and works while the pipeline runs. It finds the store from the config's `runtime.state`.
+
+```bash
+tangent state --config tangent.yaml ls                          # keys per namespace
+tangent state --config tangent.yaml get count:acme              # one entry (--ns defaults to the only namespace)
+tangent state --config tangent.yaml scan --prefix user: --limit 50
+tangent state --config tangent.yaml sql "select ns, count(*) from state group by 1"   # sqlite backend only
+```
+
+**Subcommands**
+
+* `ls [--ns <ns>]`: key counts per namespace.
+* `get <key> [--ns <ns>]`: one entry, as JSON. `--ns` defaults to the pipeline's only namespace. Plugins share `plugins` unless a plugin sets a `state_namespace`.
+* `scan [--ns <ns>] [--prefix <prefix>] [--limit <n>]`: live entries whose keys start with `prefix`, one JSON object per line. `--limit` defaults to `100`.
+* `sql <query> [--limit <n>]`: a read-only SQL statement against the `sqlite` backend's table, `state`. `--limit` defaults to `1000`.
+
+`--config <file>` comes before the subcommand.

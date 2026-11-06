@@ -1,31 +1,42 @@
 ---
 title: 'tangent plugin test'
-description: 'Test WASM plugin correctness'
+description: 'Test plugins against their fixtures.'
 mode: "center"
 ---
 
-Execute plugin tests against fixtures to prevent regressions.
+Run each plugin's fixtures and compare its output with what's expected, to catch regressions. Compile the plugins first.
 
 ```bash
 tangent plugin test --config tangent.yaml
-````
+```
 
-Tests are configured in `tangent.yaml`
-Example:
-```yaml
+**Options**
+
+* `--config <file>` (required): the config whose plugins to test.
+* `--plugin <name>`: test only this plugin.
+* `--enable-http`: let plugins make HTTP calls during the test. Off by default, so a test doesn't depend on the network.
+
+Tests are configured on each plugin in `tangent.yaml`:
+
+```yaml tangent.yaml icon=settings
 plugins:
   zeek:
     module_type: go
     path: .
     tests:
       - input: tests/conn.json
-        expected:  tests/conn_out.json
+        expected: tests/conn_out.json
 ```
+
+Each test feeds `input` (a JSON array of records) to the plugin alone and compares its output with `expected`. The test passes when they match.
+
+* The plugin runs with an in-memory state store, and a failed call fails the test (whatever the plugin's `drop_on_error`).
+* The [enrichment tables](/configuration/enrichment-tables) the config declares are loaded, so a fixture runs against the same data as the pipeline. A test can name its own `enrichment_tables`, which replace the config's tables of the same name for that test.
 
 **Good tests cover**
 
 * Input edge cases (missing fields, arrays, nulls)
-* Schema mapping (e.g., OCSF)
-* Error handling (drop/route to different sinks, annotate with reasons)
+* Schema mapping (for example, to OCSF)
+* Error handling
 
 Run tests locally and in CI.

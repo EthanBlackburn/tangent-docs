@@ -1,43 +1,98 @@
 ---
 title: "Runtime"
-description: "Control batching, worker threads, and plugin paths."
+description: "Batching, workers, where compiled plugins live, and the state store."
 ---
 
-The **Runtime** section configures how Tangent executes and batches logs in memory before handing them to plugins.
+The `runtime` block configures how Tangent batches records, how many workers run plugins, and where plugins keep state. The whole block is optional and every key has a default.
 
 ---
 
 ## Schema
+
 <ParamField path="plugins_path" type="string">
-Path to compiled plugins. Defaults to `plugins/`.
+Directory of compiled plugins, relative to the config you run. `tangent plugin compile` and `tangent plugin fetch` write here, and `tangent run` reads from here. Defaults to `plugins/`.
 </ParamField>
 
 <ParamField path="batch_size" type="int">
-Maximum buffered size (KB) before flushing. Defaults to `256`.
+Size, in KiB, a worker's batch reaches before it's flushed to the plugins. Defaults to `256`.
 </ParamField>
 
 <ParamField path="batch_age" type="int">
-Maximum time (ms) logs are buffered before flush. Defaults to `5`.
+Longest time, in milliseconds, a record waits in a batch before the batch is flushed. Defaults to `5`.
 </ParamField>
 
 <ParamField path="workers" type="int">
-Number of worker threads to spawn. Defaults to the number of CPUs.
+Number of workers that run plugins. Defaults to the number of CPUs.
+</ParamField>
+
+<ParamField path="disable_remote_calls" type="bool">
+When `true`, plugins can't make outbound HTTP requests: each request a plugin makes through the `remote` interface gets status `204` and an empty body, without leaving the machine. Defaults to `false`.
+</ParamField>
+
+<ParamField path="state" type="object">
+The state store that plugins read and write through the `state` interface. See [State](#state) below.
 </ParamField>
 
 ---
 
 ## Example
+
 ```yaml tangent.yaml icon=settings
 runtime:
   plugins_path: "plugins/"
   batch_size: 1024
   batch_age: 5
   workers: 16
-````
+```
 
 ---
 
-### 🧠 Notes
+## State
 
-* `batch_size` and `batch_age` together control flush cadence.
-* `workers` determines concurrency; higher values increase throughput.
+Plugins keep keyed state through the `state` interface: `get`, `set`, `incr`, `del`, and `scan` over a key range, where each write takes an optional TTL. That state lives in the runtime's state store:
+
+```yaml tangent.yaml icon=settings
+runtime:
+  state:
+    backend: sqlite        # or lru (in-process, bounded)
+    path: state.sqlite
+    default_ttl_ms: 600000 # 0 = never expire
+    max_ttl_ms: 3600000    # cap on any TTL; 0 = no cap
+    max_entries: 100000    # lru only: evict the least recently used past this
+```
+
+<ParamField path="state.backend" type="string">
+`sqlite` (the default) keeps state in a file that survives restarts, is shared by all workers, and can be read with any SQLite client. `lru` keeps state in memory, bounded by `max_entries`, and loses it on exit. Use `lru` for tests, benchmarks, and pipelines that can start over.
+</ParamField>
+
+<ParamField path="state.path" type="string">
+The SQLite file, relative to the config you run, even when an included file sets it. Defaults to `state.sqlite`.
+</ParamField>
+
+<ParamField path="state.default_ttl_ms" type="int">
+TTL for a write that doesn't give one. `0` means entries never expire. Defaults to `600000` (10 minutes).
+</ParamField>
+
+<ParamField path="state.max_ttl_ms" type="int">
+Longest TTL a write can ask for. `0` means no cap. Defaults to `3600000` (1 hour).
+</ParamField>
+
+<ParamField path="state.max_entries" type="int">
+Entries the `lru` backend holds before it evicts the least recently used. Defaults to `100000`.
+</ParamField>
+
+<ParamField path="state.lock_timeout_ms" type="int">
+The `sqlite` backend's file belongs to one pipeline at a time, which holds a lock beside it (`state.sqlite.lock`). A second `tangent run` on the same file waits this long for the lock, then stops with `failed to acquire state lock ... (is another tangent running?)`. Defaults to `30000` (30 seconds).
+</ParamField>
+
+<ParamField path="state.read_only" type="bool">
+Opens another pipeline's SQLite state for reading only, without taking its lock. The file has to exist already, so start the writing pipeline first. Writes fail, and an expired entry reads as missing. A pipeline whose runtime writes state itself, such as one with a source that polls an API, can't open state read-only. Defaults to `false`.
+</ParamField>
+
+### Namespaces and transactions
+
+Entries are keyed by namespace and key. All plugins share the namespace `plugins` by default, so one plugin can read what another wrote. To give a plugin its own namespace, set its [`state_namespace`](/configuration/plugins).
+
+Each state call stands on its own, so when several workers run the same plugin, one worker's read can interleave with another worker's write. To read state and then write something that depends on it, wrap the calls in a transaction: `state.begin()`, then the reads and writes, then `state.commit()` or `state.rollback()`. The calls inside a transaction see each other's writes, and either all of them land or none do. No other state call runs while a transaction is open, so begin late and commit early. A second `begin`, or a remote call, inside a transaction fails, and a plugin call that returns with a transaction still open has it rolled back, with a warning.
+
+To read the store while the pipeline runs, use [`tangent state`](/cli/state).

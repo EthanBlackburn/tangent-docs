@@ -3,62 +3,62 @@ title: "MSK"
 description: "Ingest logs from Amazon MSK (Managed Streaming for Apache Kafka)."
 ---
 
-The **MSK source** allows Tangent to consume logs directly from an Amazon MSK (Kafka) cluster.  
-It supports plaintext and SCRAM-SHA authentication, as well as optional TLS configuration.
+The **MSK source** consumes records from a topic on an Amazon MSK (Kafka) cluster, with SCRAM authentication and optional TLS.
 
 ---
 
 ## Schema
+
+<ParamField path="type" type="string" required>
+Must be `msk`.
+</ParamField>
+
 <ParamField path="bootstrap_servers" type="string" required>
-A comma-separated list of Kafka broker addresses in the form `host:port`.  
-Example:`"b-1.example.com:9092,b-2.example.com:9092"`
+A comma-separated list of Kafka broker addresses, each `host:port`, such as `"b-1.example.com:9092,b-2.example.com:9092"`.
 </ParamField>
 
 <ParamField path="topic" type="string" required>
-Kafka topic to subscribe to.
+The Kafka topic to subscribe to.
+</ParamField>
+
+<ParamField path="auth" type="object" required>
+Authentication settings. See [`auth`](#auth) below.
+</ParamField>
+
+<ParamField path="decoding" type="object" required>
+How to parse each message's payload. See [Decoding](/configuration/sources/decoding).
 </ParamField>
 
 <ParamField path="group_id" type="string">
-Consumer group ID for this Tangent node.  
-Defaults to `tangent-node`.
+The consumer group ID for this Tangent node. Defaults to `tangent-node`.
 </ParamField>
 
 <ParamField path="security_protocol" type="string">
-Kafka security protocol to use.  
-Defaults to `PLAINTEXT`.  
-Typical values: `PLAINTEXT`, `SASL_SSL`, `SSL`.
+The Kafka security protocol. Defaults to `PLAINTEXT`. Typical values: `PLAINTEXT`, `SASL_SSL`, `SSL`.
 </ParamField>
 
 <ParamField path="ssl_ca_location" type="string">
-Path to CA certificate file if using SSL/TLS.
+Path to the CA certificate file, when using SSL/TLS.
 </ParamField>
 
 <ParamField path="ssl_certificate_location" type="string">
-Path to the client certificate file if required by your MSK cluster.
+Path to the client certificate file, if your MSK cluster requires one.
 </ParamField>
 
 <ParamField path="ssl_key_location" type="string">
-Path to the client private key file if required by your MSK cluster.
-</ParamField>
-<ParamField path="decoding" type="string">
-Specifies how incoming Kafka message payloads are decoded before being sent to your plugin.  
-See [Decoding Options](/configuration/sources/decoding) for details.
+Path to the client private key file, if your MSK cluster requires one.
 </ParamField>
 
 ---
 
 ## `auth`
 
-Authentication settings for connecting to MSK.
-
 <ParamField path="auth.mode" type="string" required>
-Authentication mode.  
-Currently only `scram` is supported.
+Authentication mode. Only `scram` is supported.
 </ParamField>
 
 <ParamField path="auth.sasl_mechanism" type="string">
-SASL mechanism to use for SCRAM authentication.  
-Defaults to `SCRAM-SHA-512`.
+The SASL mechanism for SCRAM. Defaults to `SCRAM-SHA-512`.
 </ParamField>
 
 <ParamField path="auth.username" type="string" required>
@@ -66,8 +66,7 @@ Username for SASL authentication.
 </ParamField>
 
 <ParamField path="auth.password" type="string" required>
-Password for SASL authentication.  
-This is stored securely using `SecretString`.
+Password for SASL authentication. Use `${VAR}` to keep it out of the file. [`tangent config`](/cli/config) leaves it out of its output.
 </ParamField>
 
 ---
@@ -87,15 +86,15 @@ sources:
       mode: scram
       sasl_mechanism: SCRAM-SHA-512
       username: tangent
-      password: supersecret
-    decoding: json
-````
+      password: "${MSK_PASSWORD}"
+    decoding:
+      format: { type: ndjson }
+```
 
 ---
 
-### 🧠 Notes
+### Notes
 
-* Tangent uses Kafka’s standard consumer group semantics.
-* If `auth.mode` is set to `scram`, ensure the brokers support SASL/SCRAM.
-* TLS parameters are optional but recommended in production.
-* The `decoding` field determines how message bytes are parsed (e.g. `json`, `ndjson`, `raw`).
+* Tangent uses Kafka's standard consumer group semantics.
+* With `auth.mode: scram`, make sure the brokers support SASL/SCRAM.
+* TLS parameters are optional, and recommended in production.

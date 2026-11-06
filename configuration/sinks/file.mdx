@@ -1,31 +1,31 @@
 ---
 title: "File"
-description: "Write output to a local file"
+description: "Append NDJSON to a local file."
+---
+
+The **File sink** appends every write to one file at `path`, as newline-delimited JSON. Because each write is appended to the same file, only NDJSON survives it, so this sink takes no other encoding: a config that gives it another `encoding` fails to load. To write Parquet, Avro, or JSON files, use a [rolling file sink](/configuration/sinks/rolling-file).
+
 ---
 
 ## Schema
+
 <ParamField path="type" type="string" required>
-This should be set to `file`
+Must be `file`.
 </ParamField>
 
 <ParamField path="path" type="string" required>
-Filepath to sink data
-</ParamField>
-<ParamField path="encoding" type="object">
-Controls how Tangent serializes records emitted by this source. See [Encoding](/configuration/sinks/encoding).
-</ParamField>
-
-<ParamField path="compression" type="object">
-Controls how Tangent compresses payloads emitted by this source. See [Compression](/configuration/sinks/compression).
+The file to append to, relative to the working directory.
 </ParamField>
 
 ---
 
 ## Example
 
-```yaml
+```yaml tangent.yaml icon=file
 sinks:
   local_file:
     type: file
     path: /tmp/out.ndjson
-````
+```
+
+The file sink writes plain NDJSON. It doesn't compress what it writes.
