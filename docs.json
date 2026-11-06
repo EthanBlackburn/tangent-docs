@@ -85,7 +85,7 @@
           {
             "group": "tangent.yaml",
             "icon": "file-cog",
-            "pages": ["configuration/tangent-yaml"]
+            "pages": ["configuration/tangent-yaml", "configuration/include"]
           },
           {
             "group": "Runtime",
@@ -96,6 +96,16 @@
             "group": "Plugins",
             "icon": "plug-zap",
             "pages": ["configuration/plugins"]
+          },
+          {
+            "group": "Inference",
+            "icon": "sparkles",
+            "pages": ["configuration/inference"]
+          },
+          {
+            "group": "Enrichment tables",
+            "icon": "database",
+            "pages": ["configuration/enrichment-tables"]
           },
           {
             "group": "DAG",
