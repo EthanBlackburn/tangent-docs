@@ -4,7 +4,7 @@ description: 'Measure a pipeline’s throughput and latency.'
 mode: "center"
 ---
 
-Send load to a running pipeline to measure its throughput and latency. Start the pipeline with `tangent run` first, then point `tangent bench` at the same config: it connects to the config's TCP or socket source and reads the runtime's metrics.
+Send load to a running pipeline to measure its throughput and latency. Start the pipeline with `tangent run` first, then point `tangent bench` at the same config: it sends to the config's source and reads the runtime's metrics. It drives a `tcp` or `socket` source over connections, an `msk` source as a Kafka producer, and an `sqs` source by uploading the payload to an S3 bucket whose notifications reach the queue (`--bucket`). A `file`, `sqlite`, `github_webhook`, or `npm_registry` source can't be benchmarked, and neither can a source that polls an API.
 
 ```bash
 tangent run --config tangent.yaml
@@ -21,6 +21,8 @@ tangent bench --config tangent.yaml --seconds 30 --payload tests/input.json
 * `--synthesize`: treat the payload as a template and generate varied records from it, such as the `tests/bench.json` a scaffolded plugin comes with.
 * `--max-bytes <n>`: cap on the bytes per write (`0` disables it). Defaults to `65536`.
 * `--metrics-url <url>`: the runtime's Prometheus endpoint. Defaults to `http://127.0.0.1:9184/metrics`.
+* `--bucket <name>`: for an `sqs` source, the S3 bucket bench uploads the payload to, as one object after another, with the AWS SDK's default credentials. Required for an `sqs` source.
+* `--object-prefix <prefix>`: for an `sqs` source, where in the bucket the objects go. Defaults to `bench/`.
 * `--disable-metrics`: don't read the runtime's metrics. Use it only when benchmarking something other than `tangent run`.
 
 **Output (example, a scaffolded Python plugin with `--seconds 5`)**
