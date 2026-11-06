@@ -201,6 +201,12 @@
       "claude"
     ]
   },
+  "redirects": [
+    {
+      "source": "/installation",
+      "destination": "/install"
+    }
+  ],
   "footer": {
     "socials": {
       "x": "https://x.com/telophasehq",
