@@ -26,7 +26,7 @@ Number of workers that run plugins. Defaults to the number of CPUs.
 </ParamField>
 
 <ParamField path="disable_remote_calls" type="bool">
-When `true`, plugins can't make outbound HTTP requests. Defaults to `false`.
+When `true`, plugins can't make outbound HTTP requests: each request a plugin makes through the `remote` interface gets status `204` and an empty body, without leaving the machine. Defaults to `false`.
 </ParamField>
 
 <ParamField path="state" type="object">

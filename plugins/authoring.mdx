@@ -558,7 +558,7 @@ Plugins can make network calls to enrich logs. In this example, the plugin colle
   </Tab>
 </Tabs>
 
-`tangent plugin test` blocks remote calls unless you pass `--enable-http`, and `runtime.disable_remote_calls: true` blocks them in a pipeline. A remote call inside an open state transaction fails.
+`tangent plugin test` blocks remote calls unless you pass `--enable-http`, and `runtime.disable_remote_calls: true` blocks them in a pipeline. A blocked call doesn't fail: each request gets status `204`, no headers, and an empty body, so the examples above return an error on status 204, and fail their test, when `--enable-http` is left out. A remote call inside an open state transaction fails.
 
 ## Local dev loop
 
