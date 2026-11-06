@@ -35,7 +35,7 @@ sources:
 Send it records with any TCP client:
 
 ```bash
-nc localhost 9000 < events.ndjson
+nc -w 1 localhost 9000 < events.ndjson
 ```
 
 ---
