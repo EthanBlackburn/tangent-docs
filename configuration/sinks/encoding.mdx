@@ -23,7 +23,7 @@ The [File sink](/configuration/sinks/file) takes `ndjson` only. Use a [rolling f
 <ParamField path="encoding.schema" type="string | map">
 Required for `avro` and `parquet`.
 
-- For `avro`, the Avro schema itself, as JSON text. Each record is written as an Avro map, so give a map schema, such as `{"type": "map", "values": "string"}`. A record schema isn't supported yet: it passes the check at startup, then every file fails to encode.
+- For `avro`, the Avro schema itself, as JSON text. Each record is written as an Avro map, so only a map schema works, and only `{"type": "map", "values": "string"}` in practice: a record whose values are all strings. A record with a number, a boolean, a null, a list, or a nested object fails its file, and so does a record schema, or a map whose values are a union. Each schema passes the check at startup; the file then fails to encode, is retried every 30 seconds, and stays in the WAL. For any other records, use Parquet or NDJSON.
 - For `parquet`, the file's columns, in order, each a name and a type: `string`, `int` (64 bits), `float` (a double), `bool`, or `timestamp` (milliseconds in UTC, read from RFC 3339 text in any zone). A nested map of columns is a struct, for a nested object. Every column can be null.
 </ParamField>
 
@@ -79,7 +79,7 @@ sinks:
     bucket_name: my-bucket
     encoding:
       type: avro
-      schema: '{"type": "map", "values": "string"}'   # each record a map of strings
+      schema: '{"type": "map", "values": "string"}'   # only for records whose every value is a string
     compression:
       type: deflate
 ```
