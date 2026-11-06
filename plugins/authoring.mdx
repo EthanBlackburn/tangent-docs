@@ -3,15 +3,17 @@ title: "Authoring a Plugin"
 description: "How to write a new plugin"
 ---
 
-Processors implement the `processor` **interface** defined in `.tangent/wit/processor.wit`.
+A plugin implements the `mapper` interface of the `processor` world, defined in `.tangent/wit/processor.wit`. `tangent plugin compile` writes that WIT into the plugin's directory from the tangent that compiles it, so a plugin always builds against the interface of the runtime that will run it.
+
+The quickest start is [`tangent plugin scaffold`](/cli/plugin/scaffold), which writes a working plugin with all three methods below.
 
 ## Interface
 
-The interface has three methods to implement
+The interface has three methods to implement.
 
 ### Metadata
 
-Name and version of your plugin
+The name and version of your plugin.
 
 <Tabs>
   <Tab title="Go">
@@ -21,7 +23,7 @@ Name and version of your plugin
     import (
         tangent_sdk "github.com/ethanblackburn/tangent-sdk-go"
     )
-    
+
     var Metadata = tangent_sdk.Metadata{
         Name:    "golang",
         Version: "0.2.0",
@@ -34,8 +36,9 @@ Name and version of your plugin
     <CodeGroup>
 
     ```python mapper.py
-    def metadata(self) -> mapper.Meta:
-      return mapper.Meta(name="python-example", version="0.1.0")
+    class Mapper(wit_world.WitWorld):
+        def metadata(self) -> mapper.Meta:
+            return mapper.Meta(name="python-example", version="0.1.0")
     ```
 
     </CodeGroup>
@@ -45,7 +48,7 @@ Name and version of your plugin
 
     ```rust lib.rs
     use exports::tangent::logs::mapper::Meta;
-    
+
     fn metadata() -> Meta {
         Meta {
             name: "rust".to_string(),
@@ -60,7 +63,7 @@ Name and version of your plugin
 
 ### Probe
 
-Used to tell the host which logs to send to the mapper
+Tells the host which records to send to the plugin. A probe returns a list of selectors, and a record that matches any selector is sent. In a selector, a record must match every predicate in `all`, at least one in `any` (when `any` isn't empty), and none in `none`. The predicates are `has`, `eq`, `prefix`, `in`, `gt`, and `regex`, each on a field path.
 
 <Tabs>
   <Tab title="Go">
@@ -70,7 +73,7 @@ Used to tell the host which logs to send to the mapper
     import (
         tangent_sdk "github.com/ethanblackburn/tangent-sdk-go"
     )
-    
+
     var selectors = []tangent_sdk.Selector{
         {
             All: []tangent_sdk.Predicate{
@@ -87,18 +90,18 @@ Used to tell the host which logs to send to the mapper
 
     ```python mapper.py
     def probe(self) -> List[mapper.Selector]:
-      # Match logs where source.name == "myservice"
-      return [
-          mapper.Selector(
-              any=[],
-              all=[
-                  mapper.Pred_Eq(
-                      ("source.name", log.Scalar_Str("myservice"))
-                  )
-              ],
-              none=[],
-          )
-      ]
+        # Match logs where source.name == "myservice"
+        return [
+            mapper.Selector(
+                any=[],
+                all=[
+                    mapper.Pred_Eq(
+                        ("source.name", log.Scalar_Str("myservice"))
+                    )
+                ],
+                none=[],
+            )
+        ]
     ```
 
     </CodeGroup>
@@ -109,7 +112,7 @@ Used to tell the host which logs to send to the mapper
     ```rust lib.rs
     use exports::tangent::logs::mapper::{Pred, Selector};
     use tangent::logs::log::Scalar;
-    
+
     fn probe() -> Vec<Selector> {
         vec![Selector {
             any: Vec::new(),
@@ -126,23 +129,25 @@ Used to tell the host which logs to send to the mapper
   </Tab>
 </Tabs>
 
-Will send all logs with
+This probe selects every record with
+
+```json
+{"source": {"name": "myservice"}}
+```
+
+or with the literal key
 
 ```json
 {"source.name": "myservice"}
 ```
 
-or
-
-```json
-{"source": {"name": "my service"}}
-```
+The probe is the plugin's filter. A record that no plugin on a fan-out selects is dropped and counted (see [DAG](/configuration/dag)).
 
 ### ProcessLogs
 
-This is the business logic of your plugin. It takes in a `log.Logview`, which allows it to read `json` data provided by the host. This function can return scalars, lists, or maps.
+The business logic of your plugin. It gets a batch of `log.Logview` handles, which read the record's JSON from the host, and returns its output records as newline-delimited JSON, one line per record. Returning fewer lines than it got drops records. Returning an error drops the batch, unless the plugin's [`drop_on_error`](/configuration/plugins) is `false`.
 
-Performance note: Always prefer to fetch scalar values from the log. Scalars do not create heap allocations. Fetching lists and maps allocate on the heap, which hurts performance.
+Performance note: prefer to fetch scalar values from the log. Scalars don't allocate on the heap, while fetching lists and maps does, which hurts performance.
 
 <Tabs>
   <Tab title="Go">
@@ -151,32 +156,30 @@ Performance note: Always prefer to fetch scalar values from the log. Scalars do 
     ```go main.go
     import (
         tangent_sdk "github.com/ethanblackburn/tangent-sdk-go"
-        "github.com/ethanblackburn/tangent-sdk-go/helpers"
     )
-    
+
+    //easyjson:json
     type ExampleOutput struct {
-        Msg      string   `json:"message"`
+        Msg string `json:"message"`
     }
-    
+
     func ExampleMapper(lv tangent_sdk.Log) (ExampleOutput, error) {
         var out ExampleOutput
-        msg := helpers.GetString(lv, "msg")
-        if msg != nil {
+        if msg := lv.GetString("msg"); msg != nil {
             out.Msg = *msg
         }
-    
         return out, nil
     }
-    
+
     func init() {
         tangent_sdk.Wire[ExampleOutput](
             Metadata,
             selectors,
-            ExampleMapper,
-            nil,
+            ExampleMapper, // per-log handler
+            nil,           // batch handler
         )
     }
-    
+
     func main() {}
     ```
 
@@ -187,13 +190,13 @@ Performance note: Always prefer to fetch scalar values from the log. Scalars do 
 
     ```python mapper.py
     def process_logs(self, logs: List[log.Logview]) -> bytes:
-      buf = bytearray()
-      for lv in logs:
-          with lv:
-              msg = lv.get("msg")
-              value = msg.value if msg is not None else ""
-              out.extend(json.dumps({"message": value}).encode() + b"\n")
-      return bytes(buf)
+        buf = bytearray()
+        for lv in logs:
+            with lv:
+                msg = lv.get("msg")
+                value = msg.value if msg is not None else ""
+                buf.extend(json.dumps({"message": value}).encode() + b"\n")
+        return bytes(buf)
     ```
 
     </CodeGroup>
@@ -204,27 +207,34 @@ Performance note: Always prefer to fetch scalar values from the log. Scalars do 
     ```rust lib.rs
     use exports::tangent::logs::mapper::Guest;
     use tangent::logs::log::{Logview, Scalar};
-    
+
     #[derive(Default, Serialize)]
     struct ExampleOutput {
         message: String,
     }
-    
+
+    fn string_from_scalar(s: Scalar) -> Option<String> {
+        match s {
+            Scalar::Str(v) => Some(v),
+            _ => None,
+        }
+    }
+
     fn process_logs(input: Vec<Logview>) -> Result<Vec<u8>, String> {
         let mut buf = Vec::new();
-    
+
         for lv in input {
             let mut out = ExampleOutput::default();
-    
+
             if let Some(val) = lv.get("msg").and_then(string_from_scalar) {
                 out.message = val;
             }
-    
+
             let json_line = serde_json::to_vec(&out).map_err(|e| e.to_string())?;
             buf.extend(json_line);
             buf.push(b'\n');
         }
-    
+
         Ok(buf)
     }
     ```
@@ -233,115 +243,122 @@ Performance note: Always prefer to fetch scalar values from the log. Scalars do 
   </Tab>
 </Tabs>
 
+In Go, the SDK serializes what your handler returns: `Wire` takes a per-log handler, which returns one output per record, or a batch handler, which takes the whole batch and returns a slice (see the next section).
+
+## What else a plugin can call
+
+Besides `log`, the `processor` world gives a plugin these host interfaces:
+
+| interface | what it does | see |
+|---|---|---|
+| `config` | `get(key)`: the plugin's `config` settings from the pipeline config | [Plugins](/configuration/plugins) |
+| `state` | `get`, `set`, `incr`, `del`, `scan`, and `begin`/`commit`/`rollback`: keyed state shared by every worker | [State](/configuration/runtime#state) |
+| `enrichment` | `lookup(table, key)`: reference data loaded once per process | [Enrichment tables](/configuration/enrichment-tables) |
+| `remote` | `call-batch(requests)`: HTTP requests made by the host | below |
+
 ## Enriching logs
 
-Plugins can make network calls to enrich logs. In this example, we batch all unique IPs found in the logs, call a remote API once per IP, and merge the results back into the output. The Go, Python, and Rust examples below show the same enrichment behavior.
+Plugins can make network calls to enrich logs. In this example, the plugin collects the unique IPs in a batch, asks a remote API about each one in a single batched call, and merges the answers back into the output. The Go, Python, and Rust versions behave the same.
 
 <Tabs>
   <Tab title="Go">
     <CodeGroup>
 
     ```go main.go
+    package main
+
     import (
         "encoding/json"
         "fmt"
         "net/url"
-    
+
         tangent_sdk "github.com/ethanblackburn/tangent-sdk-go"
-        "github.com/ethanblackburn/tangent-sdk-go/helpers"
         "github.com/ethanblackburn/tangent-sdk-go/http"
     )
-    
+
+    var Metadata = tangent_sdk.Metadata{
+        Name:    "ip-country-enrichment",
+        Version: "0.1.0",
+    }
+
+    var selectors = []tangent_sdk.Selector{
+        {
+            All: []tangent_sdk.Predicate{
+                tangent_sdk.Has("ip_address"),
+            },
+        },
+    }
+
+    //easyjson:json
     type EnrichedOutput struct {
         IPAddress string `json:"ip_address"`
         Country   string `json:"country"`
         Service   string `json:"service"`
     }
-    
-    func ExampleMapper(lvs []tangent_sdk.Log) ([]EnrichedOutput, error) {
+
+    func EnrichMapper(lvs []tangent_sdk.Log) ([]EnrichedOutput, error) {
         outs := make([]EnrichedOutput, len(lvs))
-    
         ipToIdx := make(map[string][]int)
-    
+
+        // 1. Extract IPs and services
         for i, lv := range lvs {
-            if svc := helpers.GetString(lv, "service"); svc != nil {
+            if svc := lv.GetString("service"); svc != nil {
                 outs[i].Service = *svc
             }
-    
-            ipPtr := helpers.GetString(lv, "ip_address")
-            if ipPtr == nil || *ipPtr == "" {
-                continue
+            if ip := lv.GetString("ip_address"); ip != nil && *ip != "" {
+                outs[i].IPAddress = *ip
+                ipToIdx[*ip] = append(ipToIdx[*ip], i)
             }
-    
-            ip := *ipPtr
-            outs[i].IPAddress = ip
-            ipToIdx[ip] = append(ipToIdx[ip], i)
         }
-    
         if len(ipToIdx) == 0 {
             return outs, nil
         }
-    
-        reqs := make([]http.RemoteRequest, 0, len(ipToIdx))
+
+        // 2. One request per unique IP, all sent in one batch
+        reqs := make([]http.Request, 0, len(ipToIdx))
         for ip := range ipToIdx {
-            u := "https://ipinfo.io/" + url.QueryEscape(ip)
-    
-            reqs = append(reqs, http.RemoteRequest{
+            reqs = append(reqs, http.Request{
                 ID:     ip,
-                Method: http.RemoteMethodGet,
-                URL:    u,
+                Method: http.MethodGet,
+                URL:    "https://ipinfo.io/" + url.QueryEscape(ip),
             })
         }
-    
-        resps, err := http.RemoteCallBatch(reqs)
+        resps, err := http.CallBatch(reqs)
         if err != nil {
             return nil, fmt.Errorf("remote batch call failed: %w", err)
         }
-    
-        type ipinfoPayload struct {
-            Country string `json:"country"`
-        }
-    
-        ipToCountry := make(map[string]string, len(resps))
-    
+
+        // 3. Assign each country back to its records
         for _, resp := range resps {
             if resp.Error != nil && *resp.Error != "" {
                 return nil, fmt.Errorf("remote error for ip %s: %s", resp.ID, *resp.Error)
             }
-    
             if resp.Status != 200 {
                 return nil, fmt.Errorf("remote returned status %d for ip %s", resp.Status, resp.ID)
             }
-    
-            var payload ipinfoPayload
+            var payload struct {
+                Country string `json:"country"`
+            }
             if err := json.Unmarshal(resp.Body, &payload); err != nil {
-                return nil, fmt.Errorf("failed to decode ipinfo response for %s: %w", resp.ID, err)
+                return nil, fmt.Errorf("decoding the response for %s: %w", resp.ID, err)
             }
-    
-            ipToCountry[resp.ID] = payload.Country
-        }
-    
-        for ip, idxs := range ipToIdx {
-            country := ipToCountry[ip]
-            for _, i := range idxs {
-                outs[i].Country = country
+            for _, i := range ipToIdx[resp.ID] {
+                outs[i].Country = payload.Country
             }
         }
-    
         return outs, nil
     }
-    
+
     func init() {
         tangent_sdk.Wire[EnrichedOutput](
             Metadata,
             selectors,
-            nil,           // per-log handler
-            ExampleMapper, // batch handler
+            nil,          // per-log handler
+            EnrichMapper, // batch handler
         )
     }
-    
+
     func main() {}
-    
     ```
 
     </CodeGroup>
@@ -350,68 +367,72 @@ Plugins can make network calls to enrich logs. In this example, we batch all uni
     <CodeGroup>
 
     ```python mapper.py
+    from typing import Dict, List
+
     import json
-    from typing import List, Dict
+    import wit_world
+    from componentize_py_types import Err
     from wit_world.exports import mapper
-    from wit_world.imports import log, http
-    
-    def process_logs(self, logs: List[log.Logview]) -> bytes:
-      outs = []
-      ip_to_idxs: Dict[str, List[int]] = {}
-    
-      # 1. Extract IPs & service names
-      for i, lv in enumerate(logs):
-          with lv:
-              service = lv.get("service")
-              ip = lv.get("ip_address")
-    
-              entry = {
-                  "service": service.value if service else "",
-                  "ip_address": ip.value if ip else "",
-                  "country": ""
-              }
-              outs.append(entry)
-    
-              if ip and ip.value:
-                  ip_to_idxs.setdefault(ip.value, []).append(i)
-    
-      if not ip_to_idxs:
-          return b"\n".join(json.dumps(o).encode() for o in outs) + b"\n"
-    
-      # 2. Build remote requests
-      reqs = []
-      for ip in ip_to_idxs.keys():
-          reqs.append(
-              http.RemoteRequest(
-                  id=ip,
-                  method=http.RemoteMethod.GET,
-                  url=f"https://ipinfo.io/{ip}"
-              )
-          )
-    
-      # 3. Make batched remote calls
-      resps = http.remote_call_batch(reqs)
-    
-      ip_to_country = {}
-      for resp in resps:
-          if resp.error is not None and resp.error != "":
-              raise Exception(f"remote error for ip {resp.id}: {resp.error}")
-          if resp.status != 200:
-              raise Exception(f"unexpected status {resp.status} for ip {resp.id}")
-    
-          payload = json.loads(resp.body.decode())
-          ip_to_country[resp.id] = payload.get("country", "")
-    
-      # 4. Assign country back to outputs
-      for ip, idxs in ip_to_idxs.items():
-          for i in idxs:
-              outs[i]["country"] = ip_to_country.get(ip, "")
-    
-      # 5. Return JSON
-      buf = bytearray()
-      for o in outs:
-          buf.extend(json.dumps(o).encode() + b"\n")
-      return bytes(buf)
+    from wit_world.imports import log, remote
+
+
+    class Mapper(wit_world.WitWorld):
+        def metadata(self) -> mapper.Meta:
+            return mapper.Meta(name="ip-country-enrichment", version="0.1.0")
+
+        def probe(self) -> List[mapper.Selector]:
+            return [mapper.Selector(any=[], all=[mapper.Pred_Has("ip_address")], none=[])]
+
+        def process_logs(self, logs: List[log.Logview]) -> bytes:
+            outs = []
+            ip_to_idxs: Dict[str, List[int]] = {}
+
+            # 1. Extract IPs and service names
+            for i, lv in enumerate(logs):
+                with lv:
+                    service = lv.get("service")
+                    ip = lv.get("ip_address")
+
+                    outs.append({
+                        "service": service.value if service else "",
+                        "ip_address": ip.value if ip else "",
+                        "country": "",
+                    })
+
+                    if ip and ip.value:
+                        ip_to_idxs.setdefault(ip.value, []).append(i)
+
+            # 2. One request per unique IP, all sent in one batch
+            if ip_to_idxs:
+                reqs = [
+                    remote.Request(
+                        id=ip,
+                        method=remote.Method.GET,
+                        url=f"https://ipinfo.io/{ip}",
+                        headers=[],
+                        body=b"",
+                        timeout_ms=None,
+                        cache_ttl_ms=None,
+                    )
+                    for ip in ip_to_idxs
+                ]
+                resps = remote.call_batch(reqs)
+
+                # 3. Assign each country back to its records
+                for resp in resps:
+                    if resp.error:
+                        raise Err(f"remote error for ip {resp.id}: {resp.error}")
+                    if resp.status != 200:
+                        raise Err(f"unexpected status {resp.status} for ip {resp.id}")
+                    country = json.loads(resp.body).get("country", "")
+                    for i in ip_to_idxs[resp.id]:
+                        outs[i]["country"] = country
+
+            # 4. One JSON line per output record
+            buf = bytearray()
+            for o in outs:
+                buf.extend(json.dumps(o).encode() + b"\n")
+            return bytes(buf)
     ```
 
     </CodeGroup>
@@ -421,117 +442,128 @@ Plugins can make network calls to enrich logs. In this example, we batch all uni
 
     ```rust lib.rs
     use serde::{Deserialize, Serialize};
-    use tangent::logs::log::Logview;
-    use exports::tangent::logs::mapper::http::{RemoteMethod, RemoteRequest, remote_call_batch};
-    
+    use std::collections::HashMap;
+
+    wit_bindgen::generate!({
+        path: ".tangent/wit",
+        world: "processor",
+        generate_all,
+    });
+
+    use exports::tangent::logs::mapper::{Guest, Meta, Pred, Selector};
+    use tangent::logs::log::{Logview, Scalar};
+    use tangent::logs::remote::{call_batch, Method, Request};
+
+    struct Component;
+
+    export!(Component);
+
+    fn string_from_scalar(s: Scalar) -> Option<String> {
+        match s {
+            Scalar::Str(v) => Some(v),
+            _ => None,
+        }
+    }
+
     #[derive(Default, Serialize)]
     struct EnrichedOutput {
         ip_address: String,
         country: String,
         service: String,
     }
-    
-    fn process_logs(input: Vec<Logview>) -> Result<Vec<u8>, String> {
-        let mut outs = Vec::<EnrichedOutput>::with_capacity(input.len());
-        let mut ip_to_idxs: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
-    
-        // 1. Extract IPs & services
-        for (i, lv) in input.iter().enumerate() {
-            let mut out = EnrichedOutput::default();
-    
-            if let Some(svc) = lv.get("service").and_then(string_from_scalar) {
-                out.service = svc;
+
+    #[derive(Deserialize)]
+    struct IpInfo {
+        country: Option<String>,
+    }
+
+    impl Guest for Component {
+        fn metadata() -> Meta {
+            Meta {
+                name: "ip-country-enrichment".to_string(),
+                version: "0.1.0".to_string(),
             }
-    
-            if let Some(ip) = lv.get("ip_address").and_then(string_from_scalar) {
-                if !ip.is_empty() {
-                    ip_to_idxs.entry(ip.clone()).or_default().push(i);
-                }
-                out.ip_address = ip;
-            }
-    
-            outs.push(out);
         }
-    
-        // If no IPs, return quickly
-        if ip_to_idxs.is_empty() {
+
+        fn probe() -> Vec<Selector> {
+            vec![Selector {
+                any: Vec::new(),
+                all: vec![Pred::Has("ip_address".to_string())],
+                none: Vec::new(),
+            }]
+        }
+
+        fn process_logs(input: Vec<Logview>) -> Result<Vec<u8>, String> {
+            let mut outs = Vec::with_capacity(input.len());
+            let mut ip_to_idxs: HashMap<String, Vec<usize>> = HashMap::new();
+
+            // 1. Extract IPs and services
+            for (i, lv) in input.iter().enumerate() {
+                let mut out = EnrichedOutput::default();
+                if let Some(svc) = lv.get("service").and_then(string_from_scalar) {
+                    out.service = svc;
+                }
+                if let Some(ip) = lv.get("ip_address").and_then(string_from_scalar) {
+                    if !ip.is_empty() {
+                        ip_to_idxs.entry(ip.clone()).or_default().push(i);
+                    }
+                    out.ip_address = ip;
+                }
+                outs.push(out);
+            }
+
+            // 2. One request per unique IP, all sent in one batch
+            if !ip_to_idxs.is_empty() {
+                let reqs: Vec<Request> = ip_to_idxs
+                    .keys()
+                    .map(|ip| Request {
+                        id: ip.clone(),
+                        method: Method::Get,
+                        url: format!("https://ipinfo.io/{ip}"),
+                        headers: Vec::new(),
+                        body: Vec::new(),
+                        timeout_ms: None,
+                        cache_ttl_ms: None,
+                    })
+                    .collect();
+
+                // 3. Assign each country back to its records
+                for resp in call_batch(&reqs)? {
+                    if let Some(err) = resp.error.filter(|e| !e.is_empty()) {
+                        return Err(format!("remote error for {}: {err}", resp.id));
+                    }
+                    if resp.status != 200 {
+                        return Err(format!("unexpected status {} for ip {}", resp.status, resp.id));
+                    }
+                    let info: IpInfo = serde_json::from_slice(&resp.body).map_err(|e| e.to_string())?;
+                    let country = info.country.unwrap_or_default();
+                    for &i in &ip_to_idxs[&resp.id] {
+                        outs[i].country = country.clone();
+                    }
+                }
+            }
+
+            // 4. One JSON line per output record
             let mut buf = Vec::new();
             for o in outs {
-                let line = serde_json::to_vec(&o).map_err(|e| e.to_string())?;
-                buf.extend(line);
+                serde_json::to_writer(&mut buf, &o).map_err(|e| e.to_string())?;
                 buf.push(b'\n');
             }
-            return Ok(buf);
+            Ok(buf)
         }
-    
-        // 2. Build remote requests
-        let reqs: Vec<RemoteRequest> = ip_to_idxs
-            .keys()
-            .map(|ip| RemoteRequest {
-                id: ip.clone(),
-                method: RemoteMethod::Get,
-                url: format!("https://ipinfo.io/{}", ip),
-            })
-            .collect();
-    
-        // 3. Make batched calls
-        let responses = remote_call_batch(&reqs).map_err(|e| e.to_string())?;
-        let mut ip_to_country = std::collections::HashMap::new();
-    
-        #[derive(Deserialize)]
-        struct IpInfoPayload {
-            country: Option<String>,
-        }
-    
-        // 4. Validate & parse responses
-        for resp in responses {
-            if let Some(err) = resp.error {
-                if !err.is_empty() {
-                    return Err(format!("remote error for {}: {}", resp.id, err));
-                }
-            }
-            if resp.status != 200 {
-                return Err(format!(
-                    "unexpected status {} for ip {}",
-                    resp.status, resp.id
-                ));
-            }
-    
-            let payload: IpInfoPayload =
-                serde_json::from_slice(&resp.body).map_err(|e| e.to_string())?;
-    
-            ip_to_country.insert(resp.id, payload.country.unwrap_or_default());
-        }
-    
-        // 5. Attach countries to outputs
-        for (ip, idxs) in ip_to_idxs {
-            let country = ip_to_country.get(&ip).cloned().unwrap_or_default();
-            for idx in idxs {
-                outs[idx].country = country.clone();
-            }
-        }
-    
-        // 6. Return JSONL
-        let mut buf = Vec::new();
-        for o in outs {
-            let line = serde_json::to_vec(&o).map_err(|e| e.to_string())?;
-            buf.extend(line);
-            buf.push(b'\n');
-        }
-    
-        Ok(buf)
     }
-    
     ```
 
     </CodeGroup>
   </Tab>
 </Tabs>
 
+`tangent plugin test` blocks remote calls unless you pass `--enable-http`, and `runtime.disable_remote_calls: true` blocks them in a pipeline. A remote call inside an open state transaction fails.
+
 ## Local dev loop
 
 ```bash
-tangent plugin compile --config tangent.yaml --wit ./.tangent/wit
+tangent plugin compile --config tangent.yaml
 tangent plugin test --config tangent.yaml
 tangent run --config tangent.yaml
 
