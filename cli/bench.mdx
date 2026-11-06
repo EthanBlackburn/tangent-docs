@@ -1,26 +1,46 @@
 ---
 title: 'tangent bench'
-description: 'Benchmark performance of WASM plugin'
+description: 'Measure a pipeline’s throughput and latency.'
 mode: "center"
 ---
 
-Run synthetic load against your pipeline to validate throughput and latency.
+Send load to a running pipeline to measure its throughput and latency. Start the pipeline with `tangent run` first, then point `tangent bench` at the same config: it connects to the config's TCP or socket source and reads the runtime's metrics.
 
 ```bash
-tangent bench \
-  --config tangent.yaml \
-  --seconds 30 \
-  --payload tests/input.json
-````
+tangent run --config tangent.yaml
+# in another terminal
+tangent bench --config tangent.yaml --seconds 30 --payload tests/input.json
+```
 
-**Output (example)**
+**Options**
+
+* `--config <file>` (required): the pipeline's config. Bench sends to its source.
+* `--payload <file>` (required): the records to send, as a JSON object or an array of objects. Bench sends them over and over.
+* `--seconds <n>`: how long to measure, after a warmup. Defaults to `15`.
+* `--connections <n>`: concurrent connections. Defaults to `2`.
+* `--synthesize`: treat the payload as a template and generate varied records from it, such as the `tests/bench.json` a scaffolded plugin comes with.
+* `--max-bytes <n>`: cap on the bytes per write (`0` disables it). Defaults to `65536`.
+* `--metrics-url <url>`: the runtime's Prometheus endpoint. Defaults to `http://127.0.0.1:9184/metrics`.
+* `--disable-metrics`: don't read the runtime's metrics. Use it only when benchmarking something other than `tangent run`.
+
+**Output (example, a scaffolded Python plugin with `--seconds 5`)**
 
 ```
-INFO tangent_bench::socket: ===Starting socket_main benchmark===
-INFO tangent_bench::socket: uds="/tmp/sidecar.sock" payload="examples/golang/tests/input.json" bytes/line=106 connections=10
-end-to-end: uploaded=2340.59 MiB (2340.59 MiB uncompressed) over 30.02s → 77.98 MiB/s (77.98 MiB/s uncompressed) (amplification x0.92343)
-producer bytes (consumed): 2534.67 MiB → 84.44 MiB/s
-guest: bytes_in=2531.66 MiB, avg_latency=16.941 ms (over 12215 calls)
+INFO tangent_bench: warmup: 5s, then measuring 5s for source network_input
+INFO tangent_bench::tcp: ===Starting benchmark===
+INFO tangent_bench::tcp: source=network_input tcp=0.0.0.0:9000 connections=2
+sent_bytes=117062796 sent_records=552183 MB/s=22.92 MiB/s=21.86 recs/s=108130
+end-to-end: uploaded=2.38 MB (2.38 MB uncompressed) over 0.08s → 29.81 MB/s (29.81 MB/s uncompressed) (amplification x1.19449)
+producer bytes (consumed): 2.00 MB → 24.96 MB/s
+guest: bytes_in=2.32 MB, avg_latency=73.341 ms (over 16 calls)
+```
+
+To compare languages the way the project's benchmarks do:
+
+```bash
+tangent plugin compile --config examples/rust/tangent.yaml
+tangent run --config examples/rust/tangent.yaml &
+tangent bench --config examples/rust/tangent.yaml --seconds 20 --connections 16 --payload examples/rust/tests/bench.json --synthesize
 ```
 
 Bench in CI before you ship changes to a critical transform.

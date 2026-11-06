@@ -1,19 +1,31 @@
 ---
 title: 'Overview'
-description: 'Operate Tangent from the commandline.'
+description: 'Operate Tangent from the command line.'
 mode: "center"
 ---
 
-Tangent cli ships with everything you need to develop, test, benchmark, and run your own transforms:
-* `tangent scaffold` – generate a plugin boilerplate in Go or Python
-* `tangent compile-wasm` – compile to a .wasm component
-* `tangent test` – validate correctness of transformations
-* `tangent bench` – measure throughput and latency before deploying
-* `tangent run` – to start the tangent runtime
+The `tangent` CLI has everything you need to develop, test, benchmark, and run your own transforms:
+
+* [`tangent plugin scaffold`](/cli/plugin/scaffold): generate a plugin project in Go, Python, or Rust
+* [`tangent plugin compile`](/cli/plugin/compile): compile the plugins a config names to WASM
+* [`tangent plugin fetch`](/cli/plugin/fetch): download the prebuilt plugins a config names, after checking their build's attestation, with no toolchain
+* [`tangent plugin test`](/cli/plugin/test): run plugins against their fixtures
+* [`tangent bench`](/cli/bench): measure throughput and latency before deploying
+* [`tangent run`](/cli/run): start the runtime
+* [`tangent config`](/cli/config): print a config as the runtime reads it, its includes merged
+* [`tangent state`](/cli/state): read a pipeline's state store, even while it runs
+
+Every command that works on a pipeline takes its config with `--config <file>`. `tangent --help`, and `--help` after any command, lists its options.
 
 ### Dependencies
-* `tingo` – for Go plugins
-* `componentize-py` – for Python plugins
-* `wasm-tools` – for all plugins
 
-Every Tangent plugin comes with a `setup.sh` script to install these for you.
+Compiling a plugin needs its language's toolchain:
+
+* `tinygo` for Go plugins
+* `componentize-py` for Python plugins
+* `cargo-component` for Rust plugins
+* `wasm-tools` for all plugins
+
+Every scaffolded plugin comes with a `setup.sh` that installs these. `tangent plugin scaffold --setup` runs it for you. It may add PATH lines to your shell profile.
+
+Running a plugin that's already compiled, including one fetched with `tangent plugin fetch`, needs none of these.

@@ -1,10 +1,10 @@
 ---
 title: "tangent plugin scaffold"
-description: "Create new WASM plugin"
+description: "Create a new WASM plugin project."
 mode: "center"
 ---
 
-Create a minimal plugin project in **Go**, **Python**, or **Rust** with tests and build scripts.
+Create a minimal plugin project in **Go**, **Python**, or **Rust**, with tests, a config, and build scripts.
 
 ```bash
 tangent plugin scaffold --lang go --name my-plugin
@@ -12,13 +12,20 @@ tangent plugin scaffold --lang go --name my-plugin
 tangent plugin scaffold --lang python --name my-plugin
 # or:
 tangent plugin scaffold --lang rust --name my-plugin
-````
+```
 
-What you get:
+**Options**
 
-* Plugin interface stub (`process_logs`)
-* Test fixtures (`tests/`)
-* WIT assets (`.tangent/wit`)
-* `tangent.yaml` to compile, test, bench, and run the plugin.
+* `--name <name>` (required): the project's name. Dashes are dropped, so `my-plugin` becomes the directory and plugin `myplugin`.
+* `--lang <lang>` (required): `go`, `python`, or `rust`.
+* `--setup`: also run the project's `setup.sh`, which installs the language's toolchain and may add PATH lines to your shell profile. Without it, `setup.sh` is written but not run.
 
-Then run: `compile-wasm` → `test` → `bench` → `run`.
+**What you get**
+
+* The plugin stub: `main.go`, `mapper.py`, or `src/lib.rs`, with `metadata`, `probe`, and `process_logs`
+* `tangent.yaml`: the plugin, its tests, a [TCP source](/configuration/sources/tcp) on `0.0.0.0:9000`, and a `blackhole` sink, wired in the DAG
+* Test fixtures: `tests/input.json`, `tests/expected.json`, and `tests/bench.json` (a template for `tangent bench --synthesize`)
+* `setup.sh`, a `Makefile`, a `Dockerfile`, a `README.md`, and an `Agents.md` for coding agents
+* The WIT interfaces in `.tangent/wit`
+
+Then, in the new directory, run `tangent plugin compile` → `tangent plugin test` → `tangent run` → `tangent bench`, all with `--config tangent.yaml`.
