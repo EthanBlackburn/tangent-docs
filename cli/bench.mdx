@@ -4,7 +4,7 @@ description: 'Measure a pipeline’s throughput and latency.'
 mode: "center"
 ---
 
-Send load to a running pipeline to measure its throughput and latency. Start the pipeline with `tangent run` first, then point `tangent bench` at the same config: it sends to the config's source and reads the runtime's metrics. It drives a `tcp` or `socket` source over connections, an `msk` source as a Kafka producer, and an `sqs` source by uploading the payload to an S3 bucket whose notifications reach the queue (`--bucket`). A `file`, `sqlite`, `github_webhook`, or `npm_registry` source can't be benchmarked, and neither can a source that polls an API.
+Send load to a running pipeline to measure its throughput and latency. Start the pipeline with `tangent run` first, then point `tangent bench` at the same config: it sends to the config's source and reads the runtime's metrics. It drives a `tcp` or `socket` source over connections, an `msk` source as a Kafka producer, and an `sqs` source by uploading the payload to an S3 bucket whose notifications reach the queue (`--bucket`). A `file`, `sqlite`, or `github_webhook` source can't be benchmarked, and neither can a source that polls an API.
 
 ```bash
 tangent run --config tangent.yaml
