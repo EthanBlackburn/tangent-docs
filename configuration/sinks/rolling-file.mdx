@@ -25,6 +25,10 @@ The WAL's own directory. It can't be another sink's WAL, and it can't be inside 
 Longest time, in seconds, a WAL file stays open before it's sealed and written out. Defaults to `60`.
 </ParamField>
 
+<ParamField path="object_max_bytes" type="int">
+The size of records at which a WAL file is sealed and written out, whatever its age. Defaults to `134217728` (128 MiB).
+</ParamField>
+
 <ParamField path="encoding" type="object">
 How records are serialized. See [Encoding](/configuration/sinks/encoding).
 </ParamField>
@@ -45,8 +49,7 @@ sinks:
     type: rolling_file
     path: lake/logs/%Y/%m/%d/%H
     wal_path: lake/wal               # apart from path
-    max_file_age_seconds: 3600
-    object_max_bytes: 67108864       # 64 MiB of records a file
+    max_file_age_seconds: 3600       # a file an hour, unless 128 MiB of records seal it sooner
     compression: { type: zstd, level: 3 }
     encoding:
       type: parquet
@@ -54,7 +57,7 @@ sinks:
       schema:
         ts: timestamp
         source: string
-        _norm: { org: string, actor: string }
+        _norm: { org: string, actor: string, kind: string, ip: string }
 ```
 
 ---
