@@ -24,7 +24,7 @@ tangent plugin compile --config tangent.yaml
 A plugin with `prebuilt` and no `path` is skipped: [`tangent plugin fetch`](/cli/plugin/fetch) gets it.
 
 <Note>
-With Go 1.27, the Go SDK's code generator fails with `internal error: package "github.com/ethanblackburn/tangent-sdk-go" without types was imported`. Go 1.25 works: `GOTOOLCHAIN=go1.25.4 tangent plugin compile --config tangent.yaml`. TinyGo 0.43 needs Go 1.25 through 1.27.
+A Go plugin scaffolded by tangent 0.1.9 pins a Go SDK from before November 4, 2026, whose code generator fails on Go 1.27 with `internal error: package "github.com/ethanblackburn/tangent-sdk-go" without types was imported`. Update the SDK in the plugin's directory with `go get github.com/ethanblackburn/tangent-sdk-go@latest`, or compile with Go 1.25: `GOTOOLCHAIN=go1.25.4 tangent plugin compile --config tangent.yaml`.
 </Note>
 
 See also: [tangent plugin test](/cli/plugin/test), [tangent run](/cli/run).
