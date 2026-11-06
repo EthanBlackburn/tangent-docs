@@ -1,46 +1,83 @@
 ---
 title: "DAG"
-description: "Define the dataflow graph connecting sources, plugins, and sinks."
+description: "Wire sources, plugins, inference nodes, and sinks together by name."
 ---
 
-The **DAG** (Directed Acyclic Graph) defines how data flows through your Tangent pipeline.
+The **DAG** says where each node's records go. Each edge names a node and the nodes it sends to.
 
 ---
 
 ## Schema
+
 <ParamField path="dag" type="list">
-Each entry describes a flow from one node to one or more downstream nodes.
-
-
-
-* `from.kind`: `source`, `plugin`, or `sink`
-* `from.name`: name of the node
-* `to`: list of destination nodes
+A list of edges.
 </ParamField>
+
+<ParamField path="dag[].from" type="string" required>
+The name of a source, plugin, or inference node.
+</ParamField>
+
+<ParamField path="dag[].to" type="list of strings" required>
+The names of the plugins, inference nodes, or sinks that get its records.
+</ParamField>
+
+An edge has these two keys and no others.
 
 ---
 
 ## Example
+
 ```yaml tangent.yaml icon=settings
+sources:
+  network_input:
+    type: tcp
+    bind_address: 0.0.0.0:9000
+
+plugins:
+  golang:
+    module_type: go
+    path: .
+
+sinks:
+  blackhole:
+    type: blackhole
+
 dag:
-  - from:
-      kind: source
-      name: socket_main
-    to:
-      - kind: plugin
-        name: golang
-  - from:
-      kind: plugin
-      name: golang
-    to:
-      - kind: sink
-        name: blackhole
-````
+  - from: network_input
+    to: [golang]
+  - from: golang
+    to: [blackhole]
+```
 
 ---
 
-### 🧠 Notes
+## Names
 
-* The DAG determines execution order.
-* Multiple plugins or sinks can receive data from one source.
-* Cycles are not allowed (it must remain acyclic).
+A name is one node. Sources, plugins, inference nodes, and sinks all share one namespace, so an edge never has to say what kind of node it means. If two nodes have the same name, the config fails to load and the error names both:
+
+```
+a name is one node, so an edge can name it; rename one of each:
+  - `out` is a source and a sink
+```
+
+## Checks before the first record
+
+`tangent run` (and `tangent config`) check the DAG before anything starts:
+
+* An edge from or to a name that no file defines is an error (`DAG references missing nodes`).
+* An edge out of a sink, or into a source, is an error.
+* A source with no edge out gets a warning.
+
+While the pipeline runs, a record that none of a node's targets take is dropped. For example, a record whose `source` field doesn't match any plugin's `probe` on a fan-out is dropped. The first drop from each source is logged with a warning, and `tangent_unrouted_records_total` counts every dropped record, per node.
+
+## Fan-out
+
+A node can send to several targets: `to: [lake, baseline_builder, baseline_renderer]`. Each target gets every record, and each plugin keeps only the records its `probe` selects.
+
+## Across files
+
+When a config is split across files with [`include:`](/configuration/include), the edges from every file add up. An edge that two files both give counts once, so no record is delivered twice.
+
+<Note>
+Up to release 0.1.9, an edge named each node with its kind, as `from: { kind: source, name: x }`, and an edge to a sink could carry a `key_prefix`. Both are gone. A config that still uses them fails to load with `dag[0].from: invalid type: map, expected a string`.
+</Note>
