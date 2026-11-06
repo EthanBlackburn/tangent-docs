@@ -1,0 +1,45 @@
+---
+title: "Include"
+description: "Build one pipeline config out of several files."
+---
+
+A config can span several files. `include:` lists files to merge into the file that names them, each path relative to that file. Tangent merges everything into one config before reading it, so a pipeline is still one config and one process.
+
+```yaml tangent.yaml icon=settings
+include:
+  - packs/core/ingest.yaml
+  - packs/core/judge.yaml
+  - packs/app/ingest.yaml
+plugins:
+  app: { config: { extra_sources: [billing] } }   # one setting of a plugin an included file defines
+```
+
+This is how [packs](/packs/overview) are used: your config includes the packs you want and adds your sources and the edges between them.
+
+---
+
+## How files merge
+
+* **Maps merge key by key, at any depth.** A file can add a source, add a plugin, or change one setting of a plugin that another file defines.
+* **A file wins over the files it includes.** Its `key: null` (or `key:` alone, or an unset `${VAR}` alone) removes what they set there, and the field's default applies. A null where no file set anything is no value either, so `model:` alone is a missing `model`, not an empty one. The exceptions are a plugin's `config` and an inference node's `extra`, which tangent passes on as written: there a null is a value like any other, so `extra: { response_format: ~ }` sends the null.
+* **Two files that don't include each other must agree** on any value that isn't a map, and on whether a key holds a map at all. When they don't, a file that includes both can settle it. Without one, loading fails and names the key and both files.
+* **A value reads the way its file wrote it.** `model: 1.10` is the string `"1.10"` to a string field, with `include:` or without, and two files agree only when they wrote the same text.
+* **Lists are values, except `dag`.** The edges from every file add up, and an edge that two files give counts once.
+* **The same definition is one thing.** A plugin that two files define the same way is one plugin, loaded once per worker. An enrichment table that two files define the same way is one table, loaded once for the process.
+* **A file included twice is read once**, for example when two packs both include it, and what each includer changes in it holds. A cycle of includes is an error.
+
+## Paths
+
+A plugin's `path`, `data`, and `tests`, an inference node's `prompt_file` and `schema_file`, and an enrichment table's `path` are relative to the file that names them. That way a pack's paths work wherever the pack is included.
+
+`runtime` paths (`plugins_path`, `state.path`) stay relative to the config you run. Source and sink paths stay relative to the working directory.
+
+## Variables and file-local keys
+
+`${VAR}` works in every file, including in `include` paths. `${VAR:-default}` uses `default` when the variable is unset or empty.
+
+A top-level key that starts with `x-` belongs to its file, as a place for YAML anchors (`x-prompt: &prompt judge.md`). It isn't read or merged.
+
+## Checking the result
+
+[`tangent config --config tangent.yaml`](/cli/config) prints the merged config, every default filled in, after the list of files it came from. Secret fields such as tokens, `api_key`, `webhook_url`, and passwords are left out, so its output is for reading, not for running.
