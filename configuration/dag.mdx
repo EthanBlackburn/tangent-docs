@@ -65,8 +65,9 @@ a name is one node, so an edge can name it; rename one of each:
 `tangent run` (and `tangent config`) check the DAG before anything starts:
 
 * An edge from or to a name that no file defines is an error (`DAG references missing nodes`).
-* An edge out of a sink, or into a source, is an error.
-* A source with no edge out gets a warning.
+* An edge out of a sink, or into a source, is an error (`DAG edges that cannot be`).
+
+`tangent run` also warns about a source with no edge out (`source x has no outgoing edge; its records are dropped`). It still reads that source, and drops what it reads. `tangent config` doesn't warn.
 
 While the pipeline runs, a record that none of a node's targets take is dropped. For example, a record whose `source` field doesn't match any plugin's `probe` on a fan-out is dropped. The first drop from each source is logged with a warning, and `tangent_unrouted_records_total` counts every dropped record, per node.
 
