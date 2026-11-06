@@ -1,32 +1,37 @@
 ---
 title: "File"
-description: "Read from files or directories."
+description: "Read one file into the pipeline."
 ---
 
-Tail or batch‑read files into Tangent.
+The **File source** reads one file, whole, when the pipeline starts, decodes it, and sends its records into the pipeline. It doesn't follow the file as it grows, and it doesn't expand globs.
 
 ---
 
 ## Schema
+
 <ParamField path="type" type="string" required>
-This should be set to `file`
+Must be `file`.
 </ParamField>
 
 <ParamField path="path" type="string" required>
-Filepath to source data
+Path to the file, relative to the working directory.
 </ParamField>
-<ParamField path="decoding" type="string">
-Specifies how incoming payloads are decoded before being sent to your plugin.  
-See [Decoding Options](/configuration/sources/decoding) for details.
+
+<ParamField path="decoding" type="object" required>
+How to parse the file's bytes. See [Decoding](/configuration/sources/decoding).
 </ParamField>
 
 ---
 
 ## Example
 
-```yaml
+```yaml tangent.yaml icon=file
 sources:
-  local_files:
+  local_file:
     type: file
-    path: ./data/*.ndjson
+    path: ./data/events.json
+    decoding:
+      format: { type: json-array }
 ```
+
+With `tangent run --once`, the pipeline exits once the file's records are through, which suits a one-off run over a file.
