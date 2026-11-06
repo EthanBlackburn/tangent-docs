@@ -1,0 +1,54 @@
+---
+title: "TCP"
+description: "Take NDJSON over TCP."
+---
+
+The **TCP source** listens on an address and reads newline-delimited JSON from every connection: one JSON object per line. It's the source `tangent plugin scaffold` writes into a new plugin's config, and the one `tangent bench` drives.
+
+---
+
+## Schema
+
+<ParamField path="type" type="string" required>
+Must be `tcp`.
+</ParamField>
+
+<ParamField path="bind_address" type="string">
+The address and port to listen on. Defaults to `0.0.0.0:9000`.
+</ParamField>
+
+<ParamField path="read_buffer_size" type="int">
+Bytes read from a connection at a time. Defaults to `524288` (512 KiB).
+</ParamField>
+
+---
+
+## Example
+
+```yaml tangent.yaml icon=plug
+sources:
+  network_input:
+    type: tcp
+    bind_address: 0.0.0.0:9000
+```
+
+Send it records with any TCP client:
+
+```bash
+nc localhost 9000 < events.ndjson
+```
+
+---
+
+## Behavior
+
+* Each line must be one JSON object. The TCP source takes no `decoding` block.
+* One TCP source can feed several plugins. Each plugin keeps only the records its `probe` selects, and a record that no target takes is dropped and counted (see [DAG](/configuration/dag)).
+* `tangent bench --config tangent.yaml` connects to the config's TCP source to load-test the pipeline (see [bench](/cli/bench)).
+
+---
+
+## See also
+
+* [Socket](/configuration/sources/socket), the same over a Unix domain socket
+* [DAG configuration](/configuration/dag)

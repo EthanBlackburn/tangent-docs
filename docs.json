@@ -119,6 +119,7 @@
               "configuration/sources/overview",
               "configuration/sources/msk",
               "configuration/sources/sqs",
+              "configuration/sources/tcp",
               "configuration/sources/socket",
               "configuration/sources/file",
               "configuration/sources/decoding"
